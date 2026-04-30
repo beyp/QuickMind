@@ -1,0 +1,94 @@
+import customtkinter as ctk
+from ui.sidebar import Sidebar
+from ui.task_panel import TaskPanel
+from ui.prompt_bar import PromptBar
+from ui.ai_panel import AIPanel
+from ui.outlook_panel import OutlookPanel
+from core.database import init_db
+from core.scheduler import start_scheduler
+import yaml
+from pathlib import Path
+
+_cfg_path = Path(__file__).parent.parent / "config.yaml"
+with open(_cfg_path, "r", encoding="utf-8") as f:
+    _cfg = yaml.safe_load(f)
+
+
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+
+        ctk.set_appearance_mode(_cfg["app"]["theme"])
+        ctk.set_default_color_theme("blue")
+
+        self.title("QuickMind  v" + _cfg["app"]["version"] + "  — IA locale Mistral + Outlook")
+        self.geometry("1100x780")
+        self.minsize(800, 600)
+
+        init_db()
+        start_scheduler()
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=3)
+        self.grid_rowconfigure(1, weight=2)
+        self.grid_rowconfigure(2, weight=0)
+
+        self.selected_category_id = None
+        self._ai_visible = False
+
+        # Sidebar
+        self.sidebar = Sidebar(self, on_select=self._on_category_select)
+        self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsw",
+                          padx=(10, 0), pady=10)
+
+        # Task panel
+        self.task_panel = TaskPanel(self)
+        self.task_panel.grid(row=0, column=1, sticky="nsew", padx=10, pady=(10, 4))
+
+        # IA Panel
+        self.ai_panel = AIPanel(self, on_action_done=self._on_ai_action)
+
+        # Barre basse
+        self.prompt_bar = PromptBar(
+            self,
+            on_submit=self._on_prompt,
+            on_toggle_ai=self._toggle_ai,
+            on_outlook=self._open_outlook,
+        )
+        self.prompt_bar.grid(row=2, column=0, columnspan=2,
+                             sticky="ew", padx=10, pady=(0, 10))
+
+        self.task_panel.refresh(category_id=None)
+
+    def _on_category_select(self, cat_id):
+        self.selected_category_id = cat_id
+        self.task_panel.refresh(category_id=cat_id)
+
+    def _toggle_ai(self):
+        self._ai_visible = not self._ai_visible
+        if self._ai_visible:
+            self.ai_panel.grid(row=1, column=1, sticky="nsew",
+                               padx=10, pady=(0, 4))
+        else:
+            self.ai_panel.grid_forget()
+
+    def _open_outlook(self):
+        OutlookPanel(self, on_task_created=self._on_ai_action)
+
+    def _on_ai_action(self):
+        self.task_panel.refresh(category_id=self.selected_category_id)
+
+    def _on_prompt(self, text: str):
+        txt = text.lower().strip()
+        if "urgent" in txt:
+            self.task_panel.refresh(category_id=self.selected_category_id,
+                                    priority_filter="urgent")
+        elif "termin" in txt or "done" in txt:
+            self.task_panel.refresh(category_id=self.selected_category_id,
+                                    status_filter="done")
+        elif "faire" in txt or "todo" in txt:
+            self.task_panel.refresh(category_id=self.selected_category_id,
+                                    status_filter="todo")
+        else:
+            self.task_panel.refresh(category_id=self.selected_category_id,
+                                    keyword=text)

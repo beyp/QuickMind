@@ -1,0 +1,11 @@
+customtkinter==5.2.2
+plyer==2.1.0
+schedule==1.2.2
+SQLAlchemy==2.0.36
+sqlmodel==0.0.22
+Pillow==11.1.0
+typer==0.9.4
+rich==13.9.4
+pyyaml==6.0.2
+click==8.1.7
+ollama==0.4.4
