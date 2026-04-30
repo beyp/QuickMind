@@ -1,6 +1,6 @@
 app:
   name: QuickMind
-  version: "1.0.0"
+  version: "1.1.0"
   theme: dark          # dark | light
   color_accent: "#1E90FF"
 
@@ -12,3 +12,10 @@ attachments:
 
 scheduler:
   check_interval_seconds: 30
+
+updater:
+  enabled: true
+  github_owner: "beyp"
+  github_repo: "QuickMind"
+  check_on_startup: true
+  github_token: ""
