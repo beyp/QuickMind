@@ -7,6 +7,7 @@ from ui.outlook_panel import OutlookPanel
 from core.database import init_db
 from core.scheduler import start_scheduler
 import yaml
+import threading
 from pathlib import Path
 
 _cfg_path = Path(__file__).parent.parent / "config.yaml"
@@ -34,7 +35,8 @@ class App(ctk.CTk):
         self.grid_rowconfigure(2, weight=0)
 
         self.selected_category_id = None
-        self._ai_visible = False
+        self._ai_visible           = False
+        self._update_dialog        = None  # reference pour eviter GC
 
         # Sidebar
         self.sidebar = Sidebar(self, on_select=self._on_category_select)
@@ -45,7 +47,7 @@ class App(ctk.CTk):
         self.task_panel = TaskPanel(self)
         self.task_panel.grid(row=0, column=1, sticky="nsew", padx=10, pady=(10, 4))
 
-        # IA Panel
+        # IA Panel (masque par defaut)
         self.ai_panel = AIPanel(self, on_action_done=self._on_ai_action)
 
         # Barre basse
@@ -60,6 +62,14 @@ class App(ctk.CTk):
 
         self.task_panel.refresh(category_id=None)
 
+        # Verif mise a jour apres 3 secondes
+        updater_cfg = _cfg.get("updater", {})
+        if updater_cfg.get("enabled", True) and updater_cfg.get("check_on_startup", True):
+            print("[Updater] Verification dans 3 secondes...")
+            self.after(3000, self._check_for_update)
+        else:
+            print("[Updater] Desactive dans config.yaml")
+
     def _on_category_select(self, cat_id):
         self.selected_category_id = cat_id
         self.task_panel.refresh(category_id=cat_id)
@@ -67,8 +77,7 @@ class App(ctk.CTk):
     def _toggle_ai(self):
         self._ai_visible = not self._ai_visible
         if self._ai_visible:
-            self.ai_panel.grid(row=1, column=1, sticky="nsew",
-                               padx=10, pady=(0, 4))
+            self.ai_panel.grid(row=1, column=1, sticky="nsew", padx=10, pady=(0, 4))
         else:
             self.ai_panel.grid_forget()
 
@@ -90,5 +99,38 @@ class App(ctk.CTk):
             self.task_panel.refresh(category_id=self.selected_category_id,
                                     status_filter="todo")
         else:
-            self.task_panel.refresh(category_id=self.selected_category_id,
-                                    keyword=text)
+            self.task_panel.refresh(category_id=self.selected_category_id, keyword=text)
+
+    # ── Mise a jour ───────────────────────────────────────────────────────────
+    def _check_for_update(self):
+        print("[Updater] Lancement verification...")
+        def _run():
+            try:
+                from core.updater import check_for_update
+                release = check_for_update()
+                if release:
+                    print(f"[Updater] Nouvelle version : v{release['version']}")
+                    self.after(0, lambda: self._show_update_dialog(release))
+                else:
+                    print("[Updater] Deja a jour.")
+            except Exception as e:
+                import traceback
+                print(f"[Updater] Erreur : {e}")
+                traceback.print_exc()
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _show_update_dialog(self, release: dict):
+        try:
+            from ui.update_dialog import UpdateDialog
+            print(f"[Updater] Affichage dialog v{release['version']}")
+            # Mise a jour titre
+            self.title("QuickMind  v" + _cfg["app"]["version"] +
+                       f"  —  v{release['version']} disponible !")
+            # Badge barre
+            self.prompt_bar.show_update_badge(release["version"])
+            # Dialog — stocker ref pour eviter garbage collector
+            self._update_dialog = UpdateDialog(self, release_info=release)
+        except Exception as e:
+            import traceback
+            print(f"[Updater] Erreur dialog : {e}")
+            traceback.print_exc()
