@@ -1,7 +1,7 @@
 """
 Systeme de mise a jour automatique QuickMind.
 Supporte les repos prives via token GitHub.
-Fix 404 : asset_id re-fetch juste avant telechargement.
+Fix : met a jour uniquement le numero de version dans config.yaml.
 """
 import yaml, json, sys, shutil, subprocess, threading, urllib.request
 import zipfile as zipmodule
@@ -23,10 +23,11 @@ APP_DIR = Path(sys.argv[0]).parent.resolve()
 if not (APP_DIR / "main.py").exists():
     APP_DIR = Path(__file__).parent.parent.resolve()
 
+# Fichiers jamais ecrases (sauf mise a jour partielle pour config.yaml)
 NEVER_TOUCH = {
-    "data", "config.yaml", ".env",
+    "data", ".env",
     ".git", ".gitignore", ".vscode",
-    "RELEASE.md", "debug_update.py",
+    "debug_update.py",
     "_update.zip", "_update_tmp",
 }
 
@@ -43,6 +44,21 @@ def _fetch_latest_release() -> dict | None:
     req = urllib.request.Request(API_LATEST, headers=_get_headers())
     with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read().decode())
+
+
+def _extract_asset(data: dict) -> tuple:
+    """Extrait asset_id et zip_url depuis les donnees d une release."""
+    assets   = data.get("assets", [])
+    asset_id = zip_url = None
+    for asset in assets:
+        if asset["name"].endswith(".zip"):
+            asset_id = asset["id"]
+            zip_url  = asset["browser_download_url"]
+            break
+    if not zip_url:
+        zip_url  = data.get("zipball_url")
+        asset_id = None
+    return asset_id, zip_url
 
 
 def check_for_update() -> dict | None:
@@ -71,31 +87,31 @@ def check_for_update() -> dict | None:
         return None
 
 
-def _extract_asset(data: dict) -> tuple:
-    """Extrait asset_id et zip_url depuis les donnees d une release."""
-    assets   = data.get("assets", [])
-    asset_id = None
-    zip_url  = None
-    for asset in assets:
-        if asset["name"].endswith(".zip"):
-            asset_id = asset["id"]
-            zip_url  = asset["browser_download_url"]
-            break
-    if not zip_url:
-        zip_url  = data.get("zipball_url")
-        asset_id = None
-    return asset_id, zip_url
+def _update_version_in_config(new_version: str):
+    """
+    Met a jour UNIQUEMENT le champ app.version dans config.yaml.
+    Preserve toutes les autres valeurs (token, chemins, etc.).
+    """
+    cfg_path = APP_DIR / "config.yaml"
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        cfg["app"]["version"] = new_version
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False,
+                      sort_keys=False)
+        print(f"[Updater] Version mise a jour dans config.yaml : {new_version}")
+    except Exception as e:
+        print(f"[Updater] Impossible de mettre a jour config.yaml : {e}")
 
 
 def _download(asset_id, zip_url, dest_path, on_progress):
     """
     Telecharge l asset.
-    IMPORTANT : re-fetch l asset_id frais juste avant pour eviter le 404
-    (l asset_id peut changer si la release est editee sur GitHub).
+    Re-fetch l asset_id frais juste avant pour eviter le 404.
     """
-    # Re-fetch les infos de la release pour avoir l asset_id le plus recent
     try:
-        fresh_data     = _fetch_latest_release()
+        fresh_data             = _fetch_latest_release()
         fresh_asset_id, fresh_zip_url = _extract_asset(fresh_data)
         if fresh_asset_id:
             asset_id = fresh_asset_id
@@ -103,7 +119,7 @@ def _download(asset_id, zip_url, dest_path, on_progress):
         if fresh_zip_url:
             zip_url = fresh_zip_url
     except Exception as e:
-        print(f"[Updater] Re-fetch asset ignore : {e}")
+        print(f"[Updater] Re-fetch ignore : {e}")
 
     if asset_id and GITHUB_TOKEN:
         url    = f"{API_BASE}/releases/assets/{asset_id}"
@@ -133,7 +149,7 @@ def _download(asset_id, zip_url, dest_path, on_progress):
                     )
 
 
-def download_and_install(zip_url, asset_id=None,
+def download_and_install(zip_url, asset_id=None, new_version=None,
                          on_progress=None, on_done=None, on_error=None):
     def _run():
         tmp_zip = APP_DIR / "_update.zip"
@@ -146,8 +162,8 @@ def download_and_install(zip_url, asset_id=None,
 
             if not zipmodule.is_zipfile(tmp_zip):
                 raise ValueError(
-                    f"Fichier telecharge invalide ({size} Ko). "
-                    "Verifiez que le bon QuickMind.zip est attache a la release GitHub."
+                    f"Fichier invalide ({size} Ko). "
+                    "Verifiez que QuickMind.zip est bien attache a la release GitHub."
                 )
 
             if on_progress: on_progress("Extraction...", 68)
@@ -155,13 +171,14 @@ def download_and_install(zip_url, asset_id=None,
                 shutil.rmtree(tmp_dir, ignore_errors=True)
             tmp_dir.mkdir()
 
-            # Extraire en filtrant .git et fichiers proteges
+            # Extraire en filtrant .git et proteges
+            # config.yaml est INCLUS dans l extraction mais on ne l ecrase PAS
             with zipmodule.ZipFile(tmp_zip, "r") as zf:
                 for member in zf.infolist():
                     parts = Path(member.filename).parts
                     if len(parts) < 2:
                         continue
-                    rel_parts = parts[1:]  # sans dossier racine du zip
+                    rel_parts = parts[1:]
                     top = rel_parts[0] if rel_parts else ""
                     if (top in NEVER_TOUCH
                             or top.startswith("_bk_")
@@ -171,7 +188,6 @@ def download_and_install(zip_url, asset_id=None,
                     zf.extract(member, tmp_dir)
 
             if on_progress: on_progress("Installation...", 80)
-
             contents = list(tmp_dir.iterdir())
             src_root = (contents[0]
                         if len(contents) == 1 and contents[0].is_dir()
@@ -184,8 +200,11 @@ def download_and_install(zip_url, asset_id=None,
                     continue
                 rel  = item.relative_to(src_root)
                 top  = rel.parts[0] if rel.parts else ""
-                if top in NEVER_TOUCH or ".git" in rel.parts:
+
+                # config.yaml : NE PAS ecraser (on fait la mise a jour de version apres)
+                if str(rel) == "config.yaml" or top in NEVER_TOUCH or ".git" in rel.parts:
                     continue
+
                 dest = APP_DIR / rel
                 try:
                     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -195,7 +214,13 @@ def download_and_install(zip_url, asset_id=None,
                     print(f"[Updater] Skip {rel} : {e}")
             print(f"[Updater] {ok} fichier(s) installes.")
 
-            if on_progress: on_progress("Nettoyage...", 96)
+            if on_progress: on_progress("Mise a jour de la version...", 94)
+
+            # Mettre a jour SEULEMENT le numero de version dans config.yaml
+            if new_version:
+                _update_version_in_config(new_version)
+
+            if on_progress: on_progress("Nettoyage...", 97)
             try:
                 tmp_zip.unlink(missing_ok=True)
                 shutil.rmtree(tmp_dir, ignore_errors=True)
