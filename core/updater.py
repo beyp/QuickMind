@@ -1,6 +1,7 @@
 """
 Systeme de mise a jour automatique QuickMind.
 Supporte les repos prives via token GitHub.
+Fix 404 : asset_id re-fetch juste avant telechargement.
 """
 import yaml, json, sys, shutil, subprocess, threading, urllib.request
 import zipfile as zipmodule
@@ -37,24 +38,23 @@ def _get_headers(accept="application/vnd.github+json"):
     return h
 
 
-def check_for_update():
+def _fetch_latest_release() -> dict | None:
+    """Appel API GitHub pour recuperer la derniere release (infos fraiches)."""
+    req = urllib.request.Request(API_LATEST, headers=_get_headers())
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode())
+
+
+def check_for_update() -> dict | None:
+    """Verifie si une nouvelle version est disponible."""
     try:
-        req = urllib.request.Request(API_LATEST, headers=_get_headers())
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read().decode())
+        data = _fetch_latest_release()
+        if not data:
+            return None
         latest_tag = data.get("tag_name", "").lstrip("v")
         if not latest_tag:
             return None
-        assets = data.get("assets", [])
-        asset_id = zip_url = None
-        for asset in assets:
-            if asset["name"].endswith(".zip"):
-                asset_id = asset["id"]
-                zip_url  = asset["browser_download_url"]
-                break
-        if not zip_url:
-            zip_url  = data.get("zipball_url")
-            asset_id = None
+        asset_id, zip_url = _extract_asset(data)
         if Version(latest_tag) > Version(CURRENT_VERSION):
             return {
                 "version":   latest_tag,
@@ -71,13 +71,49 @@ def check_for_update():
         return None
 
 
+def _extract_asset(data: dict) -> tuple:
+    """Extrait asset_id et zip_url depuis les donnees d une release."""
+    assets   = data.get("assets", [])
+    asset_id = None
+    zip_url  = None
+    for asset in assets:
+        if asset["name"].endswith(".zip"):
+            asset_id = asset["id"]
+            zip_url  = asset["browser_download_url"]
+            break
+    if not zip_url:
+        zip_url  = data.get("zipball_url")
+        asset_id = None
+    return asset_id, zip_url
+
+
 def _download(asset_id, zip_url, dest_path, on_progress):
+    """
+    Telecharge l asset.
+    IMPORTANT : re-fetch l asset_id frais juste avant pour eviter le 404
+    (l asset_id peut changer si la release est editee sur GitHub).
+    """
+    # Re-fetch les infos de la release pour avoir l asset_id le plus recent
+    try:
+        fresh_data     = _fetch_latest_release()
+        fresh_asset_id, fresh_zip_url = _extract_asset(fresh_data)
+        if fresh_asset_id:
+            asset_id = fresh_asset_id
+            print(f"[Updater] Asset ID rafraichi : {asset_id}")
+        if fresh_zip_url:
+            zip_url = fresh_zip_url
+    except Exception as e:
+        print(f"[Updater] Re-fetch asset ignore : {e}")
+
     if asset_id and GITHUB_TOKEN:
         url    = f"{API_BASE}/releases/assets/{asset_id}"
         accept = "application/octet-stream"
+        print(f"[Updater] Mode : API asset prive (id={asset_id})")
     else:
         url    = zip_url
         accept = "application/vnd.github+json"
+        print(f"[Updater] Mode : URL directe")
+
     print(f"[Updater] Download : {url}")
     req = urllib.request.Request(url, headers=_get_headers(accept))
     with urllib.request.urlopen(req, timeout=60) as resp:
@@ -91,8 +127,10 @@ def _download(asset_id, zip_url, dest_path, on_progress):
                 f.write(chunk)
                 done += len(chunk)
                 if total and on_progress:
-                    on_progress(f"Telechargement {done//1024} Ko / {total//1024} Ko",
-                                int(done/total*55)+10)
+                    on_progress(
+                        f"Telechargement {done//1024} Ko / {total//1024} Ko",
+                        int(done / total * 55) + 10
+                    )
 
 
 def download_and_install(zip_url, asset_id=None,
@@ -101,25 +139,29 @@ def download_and_install(zip_url, asset_id=None,
         tmp_zip = APP_DIR / "_update.zip"
         tmp_dir = APP_DIR / "_update_tmp"
         try:
-            if on_progress: on_progress("Telechargement...", 5)
+            if on_progress: on_progress("Connexion a GitHub...", 5)
             _download(asset_id, zip_url, tmp_zip, on_progress)
             size = tmp_zip.stat().st_size // 1024
             print(f"[Updater] Telecharge : {size} Ko")
 
             if not zipmodule.is_zipfile(tmp_zip):
-                raise ValueError(f"Fichier invalide ({size} Ko).")
+                raise ValueError(
+                    f"Fichier telecharge invalide ({size} Ko). "
+                    "Verifiez que le bon QuickMind.zip est attache a la release GitHub."
+                )
 
             if on_progress: on_progress("Extraction...", 68)
             if tmp_dir.exists():
                 shutil.rmtree(tmp_dir, ignore_errors=True)
             tmp_dir.mkdir()
 
+            # Extraire en filtrant .git et fichiers proteges
             with zipmodule.ZipFile(tmp_zip, "r") as zf:
                 for member in zf.infolist():
                     parts = Path(member.filename).parts
                     if len(parts) < 2:
                         continue
-                    rel_parts = parts[1:]
+                    rel_parts = parts[1:]  # sans dossier racine du zip
                     top = rel_parts[0] if rel_parts else ""
                     if (top in NEVER_TOUCH
                             or top.startswith("_bk_")
@@ -129,10 +171,13 @@ def download_and_install(zip_url, asset_id=None,
                     zf.extract(member, tmp_dir)
 
             if on_progress: on_progress("Installation...", 80)
+
             contents = list(tmp_dir.iterdir())
             src_root = (contents[0]
                         if len(contents) == 1 and contents[0].is_dir()
                         else tmp_dir)
+            print(f"[Updater] Source : {src_root}")
+
             ok = 0
             for item in src_root.rglob("*"):
                 if item.is_dir():
@@ -158,10 +203,12 @@ def download_and_install(zip_url, asset_id=None,
                 pass
 
             if on_progress: on_progress("Mise a jour terminee !", 100)
+            print("[Updater] Installation complete !")
             if on_done: on_done()
 
         except Exception as e:
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
             try:
                 tmp_zip.unlink(missing_ok=True)
                 shutil.rmtree(tmp_dir, ignore_errors=True)
