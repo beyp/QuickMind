@@ -2,13 +2,14 @@ import customtkinter as ctk
 
 
 class PromptBar(ctk.CTkFrame):
-    """Barre du bas : recherche rapide + boutons IA et Outlook."""
+    """Barre du bas : IA, Outlook, recherche, badge mise a jour."""
 
     def __init__(self, master, on_submit, on_toggle_ai=None, on_outlook=None):
         super().__init__(master, height=48, corner_radius=10)
         self.on_submit    = on_submit
         self.on_toggle_ai = on_toggle_ai
         self.on_outlook   = on_outlook
+        self._update_btn  = None
         self._build()
 
     def _build(self):
@@ -24,7 +25,7 @@ class PromptBar(ctk.CTkFrame):
 
         # Bouton Outlook
         self._ol_btn = ctk.CTkButton(
-            self, text="📬 Outlook", width=90, height=36,
+            self, text="📬 Outlook", width=100, height=36,
             fg_color="#0078D4", hover_color="#005a9e",
             command=self._open_outlook
         )
@@ -42,7 +43,33 @@ class PromptBar(ctk.CTkFrame):
         ctk.CTkButton(
             self, text="Chercher", width=90, height=36,
             command=self._submit
-        ).grid(row=0, column=3, padx=(0, 10), pady=6)
+        ).grid(row=0, column=3, padx=(0, 6), pady=6)
+
+        # Bouton mise a jour — cree mais pas visible par defaut
+        self._update_btn = ctk.CTkButton(
+            self,
+            text="",
+            width=0, height=36,
+            fg_color="#FF8C00", hover_color="#CC6600",
+            font=ctk.CTkFont(size=11, weight="bold"),
+        )
+        # Ne pas le grid ici — il sera affiche par show_update_badge()
+
+    def show_update_badge(self, version: str):
+        """Affiche le badge de mise a jour dans la barre."""
+        self._update_btn.configure(
+            text=f"⬆️ v{version}",
+            width=90,
+            command=lambda: self._on_update_click(version)
+        )
+        self._update_btn.grid(row=0, column=4, padx=(0, 10), pady=6)
+
+    def _on_update_click(self, version: str):
+        from core.updater import check_for_update
+        from ui.update_dialog import UpdateDialog
+        release = check_for_update()
+        if release:
+            UpdateDialog(self.master, release_info=release)
 
     def _submit(self):
         text = self._entry.get().strip()
