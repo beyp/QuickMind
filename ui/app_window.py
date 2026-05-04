@@ -22,7 +22,8 @@ class App(ctk.CTk):
         ctk.set_appearance_mode(_cfg["app"]["theme"])
         ctk.set_default_color_theme("blue")
 
-        self.title("QuickMind  v" + _cfg["app"]["version"] + "  — IA locale Mistral + Outlook")
+        self.title("QuickMind  v" + _cfg["app"]["version"] +
+                   "  —  IA locale Mistral + Outlook")
         self.geometry("1100x780")
         self.minsize(800, 600)
 
@@ -36,7 +37,7 @@ class App(ctk.CTk):
 
         self.selected_category_id = None
         self._ai_visible           = False
-        self._update_dialog        = None  # reference pour eviter GC
+        self._update_dialog        = None
 
         # Sidebar
         self.sidebar = Sidebar(self, on_select=self._on_category_select)
@@ -45,9 +46,10 @@ class App(ctk.CTk):
 
         # Task panel
         self.task_panel = TaskPanel(self)
-        self.task_panel.grid(row=0, column=1, sticky="nsew", padx=10, pady=(10, 4))
+        self.task_panel.grid(row=0, column=1, sticky="nsew",
+                             padx=10, pady=(10, 4))
 
-        # IA Panel (masque par defaut)
+        # IA Panel
         self.ai_panel = AIPanel(self, on_action_done=self._on_ai_action)
 
         # Barre basse
@@ -62,13 +64,15 @@ class App(ctk.CTk):
 
         self.task_panel.refresh(category_id=None)
 
-        # Verif mise a jour apres 3 secondes
+        # Verif mise a jour
         updater_cfg = _cfg.get("updater", {})
         if updater_cfg.get("enabled", True) and updater_cfg.get("check_on_startup", True):
             print("[Updater] Verification dans 3 secondes...")
             self.after(3000, self._check_for_update)
-        else:
-            print("[Updater] Desactive dans config.yaml")
+
+    def _open_file_dialog(self, path: str):
+        from ui.file_drop_dialog import FileDropDialog
+        FileDropDialog(self, file_path=path, on_task_created=self._on_ai_action)
 
     def _on_category_select(self, cat_id):
         self.selected_category_id = cat_id
@@ -77,7 +81,8 @@ class App(ctk.CTk):
     def _toggle_ai(self):
         self._ai_visible = not self._ai_visible
         if self._ai_visible:
-            self.ai_panel.grid(row=1, column=1, sticky="nsew", padx=10, pady=(0, 4))
+            self.ai_panel.grid(row=1, column=1, sticky="nsew",
+                               padx=10, pady=(0, 4))
         else:
             self.ai_panel.grid_forget()
 
@@ -99,9 +104,9 @@ class App(ctk.CTk):
             self.task_panel.refresh(category_id=self.selected_category_id,
                                     status_filter="todo")
         else:
-            self.task_panel.refresh(category_id=self.selected_category_id, keyword=text)
+            self.task_panel.refresh(category_id=self.selected_category_id,
+                                    keyword=text)
 
-    # ── Mise a jour ───────────────────────────────────────────────────────────
     def _check_for_update(self):
         print("[Updater] Lancement verification...")
         def _run():
@@ -122,13 +127,9 @@ class App(ctk.CTk):
     def _show_update_dialog(self, release: dict):
         try:
             from ui.update_dialog import UpdateDialog
-            print(f"[Updater] Affichage dialog v{release['version']}")
-            # Mise a jour titre
             self.title("QuickMind  v" + _cfg["app"]["version"] +
                        f"  —  v{release['version']} disponible !")
-            # Badge barre
             self.prompt_bar.show_update_badge(release["version"])
-            # Dialog — stocker ref pour eviter garbage collector
             self._update_dialog = UpdateDialog(self, release_info=release)
         except Exception as e:
             import traceback

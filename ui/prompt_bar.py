@@ -1,8 +1,12 @@
+"""
+Barre du bas : IA, Outlook, Analyser (avec drag & drop sur bouton), recherche.
+"""
 import customtkinter as ctk
+import tkinter.filedialog as fd
+from pathlib import Path
 
 
 class PromptBar(ctk.CTkFrame):
-    """Barre du bas : IA, Outlook, recherche, badge mise a jour."""
 
     def __init__(self, master, on_submit, on_toggle_ai=None, on_outlook=None):
         super().__init__(master, height=48, corner_radius=10)
@@ -13,7 +17,7 @@ class PromptBar(ctk.CTkFrame):
         self._build()
 
     def _build(self):
-        self.grid_columnconfigure(2, weight=1)
+        self.grid_columnconfigure(3, weight=1)
 
         # Bouton IA
         self._ai_btn = ctk.CTkButton(
@@ -21,15 +25,27 @@ class PromptBar(ctk.CTkFrame):
             fg_color="#1a3a5c", hover_color="#1E90FF",
             command=self._toggle_ai
         )
-        self._ai_btn.grid(row=0, column=0, padx=(10, 4), pady=6)
+        self._ai_btn.grid(row=0, column=0, padx=(10,4), pady=6)
 
         # Bouton Outlook
-        self._ol_btn = ctk.CTkButton(
+        ctk.CTkButton(
             self, text="📬 Outlook", width=100, height=36,
             fg_color="#0078D4", hover_color="#005a9e",
             command=self._open_outlook
+        ).grid(row=0, column=1, padx=(0,4), pady=6)
+
+        # Bouton Analyser — avec drag & drop via windnd
+        self._analyze_btn = ctk.CTkButton(
+            self,
+            text="📁 Analyser",
+            width=110, height=36,
+            fg_color="#4a2a6a", hover_color="#7B2FBE",
+            command=self._open_file_picker
         )
-        self._ol_btn.grid(row=0, column=1, padx=(0, 6), pady=6)
+        self._analyze_btn.grid(row=0, column=2, padx=(0,6), pady=6)
+
+        # Activer le drag & drop SUR LE BOUTON uniquement
+        self._setup_button_drop()
 
         # Champ de recherche
         self._entry = ctk.CTkEntry(
@@ -37,32 +53,92 @@ class PromptBar(ctk.CTkFrame):
             placeholder_text="Recherche rapide : urgent, a faire, rapport...",
             font=ctk.CTkFont(size=12)
         )
-        self._entry.grid(row=0, column=2, sticky="ew", padx=(0, 8), pady=6)
+        self._entry.grid(row=0, column=3, sticky="ew", padx=(0,8), pady=6)
         self._entry.bind("<Return>", lambda e: self._submit())
 
         ctk.CTkButton(
             self, text="Chercher", width=90, height=36,
             command=self._submit
-        ).grid(row=0, column=3, padx=(0, 6), pady=6)
+        ).grid(row=0, column=4, padx=(0,6), pady=6)
 
-        # Bouton mise a jour — cree mais pas visible par defaut
+        # Badge mise a jour (masque par defaut)
         self._update_btn = ctk.CTkButton(
-            self,
-            text="",
-            width=0, height=36,
+            self, text="", width=0, height=36,
             fg_color="#FF8C00", hover_color="#CC6600",
             font=ctk.CTkFont(size=11, weight="bold"),
         )
-        # Ne pas le grid ici — il sera affiche par show_update_badge()
+
+    def _setup_button_drop(self):
+        """Active le drag & drop sur le bouton Analyser uniquement."""
+        try:
+            import windnd
+
+            def _on_drop(files):
+                for f in files:
+                    try:
+                        path = f.decode("utf-8") if isinstance(f, bytes) else str(f)
+                        path = path.strip()
+                        if Path(path).exists():
+                            self.after(0, lambda p=path: self._open_analysis(p))
+                            # Feedback visuel
+                            self.after(0, lambda: self._analyze_btn.configure(
+                                fg_color="#7B2FBE"))
+                            self.after(1000, lambda: self._analyze_btn.configure(
+                                fg_color="#4a2a6a"))
+                            break
+                    except Exception as e:
+                        print(f"[DragDrop] Erreur : {e}")
+
+            # Hook sur le widget interne du bouton CTk
+            windnd.hook_dropfiles(self._analyze_btn, func=_on_drop)
+            # Aussi sur le frame interne du bouton
+            try:
+                windnd.hook_dropfiles(self._analyze_btn._canvas, func=_on_drop)
+            except Exception:
+                pass
+            print("[DragDrop] Drag & drop actif sur le bouton Analyser.")
+
+        except Exception as e:
+            print(f"[DragDrop] Non disponible : {e}")
+
+    def _open_file_picker(self):
+        """Ouvre l explorateur de fichiers."""
+        path = fd.askopenfilename(
+            title="Choisir un fichier a analyser par IA",
+            filetypes=[
+                ("Fichiers supportes",
+                 "*.pdf *.docx *.doc *.xlsx *.xls *.txt *.md "
+                 "*.csv *.eml *.msg *.png *.jpg *.jpeg *.gif *.bmp"),
+                ("PDF", "*.pdf"),
+                ("Word", "*.docx *.doc"),
+                ("Excel", "*.xlsx *.xls"),
+                ("Texte", "*.txt *.md *.csv"),
+                ("Email", "*.eml *.msg"),
+                ("Image", "*.png *.jpg *.jpeg *.gif *.bmp"),
+                ("Tous", "*.*"),
+            ]
+        )
+        if path:
+            self._open_analysis(path)
+
+    def _open_analysis(self, path: str):
+        from ui.file_drop_dialog import FileDropDialog
+        FileDropDialog(
+            self.master,
+            file_path=path,
+            on_task_created=self._on_file_done
+        )
+
+    def _on_file_done(self):
+        if hasattr(self.master, "_on_ai_action"):
+            self.master._on_ai_action()
 
     def show_update_badge(self, version: str):
-        """Affiche le badge de mise a jour dans la barre."""
         self._update_btn.configure(
-            text=f"⬆️ v{version}",
-            width=90,
+            text=f"⬆️ v{version}", width=90,
             command=lambda: self._on_update_click(version)
         )
-        self._update_btn.grid(row=0, column=4, padx=(0, 10), pady=6)
+        self._update_btn.grid(row=0, column=5, padx=(0,10), pady=6)
 
     def _on_update_click(self, version: str):
         from core.updater import check_for_update
@@ -81,10 +157,8 @@ class PromptBar(ctk.CTkFrame):
         if self.on_toggle_ai:
             self.on_toggle_ai()
             current = self._ai_btn.cget("fg_color")
-            if current == "#1a3a5c":
-                self._ai_btn.configure(fg_color="#1E90FF")
-            else:
-                self._ai_btn.configure(fg_color="#1a3a5c")
+            self._ai_btn.configure(
+                fg_color="#1E90FF" if current == "#1a3a5c" else "#1a3a5c")
 
     def _open_outlook(self):
         if self.on_outlook:
