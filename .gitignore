@@ -4,6 +4,7 @@ data/quickmind.db
 data/attachments/
 
 config.yaml
+debug_update.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

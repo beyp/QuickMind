@@ -1,3 +1,4 @@
+"""QuickMind — Point d entree principal."""
 from ui.app_window import App
 
 if __name__ == "__main__":
