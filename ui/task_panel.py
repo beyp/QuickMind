@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from datetime import datetime, timedelta
 from core.database import (get_tasks, get_categories, add_task,
                            update_task, delete_task, get_task_attachments)
 from core.models import Task
@@ -24,12 +25,87 @@ NEXT_STATUS = {
     "done":        "todo",
 }
 
+PRIORITY_SCORE = {"urgent": 4, "high": 3, "normal": 2, "low": 1}
+
 DESC_MAX_CHARS = 120
 
 
 def _separator(parent):
     ctk.CTkFrame(parent, height=1, fg_color=("gray70", "gray30")).pack(
         fill="x", padx=8, pady=2)
+
+
+def _smart_sort_key(task: Task) -> tuple:
+    """
+    Calcule un score de tri intelligent.
+    Plus le score est bas, plus la tache est prioritaire (tri ascendant).
+
+    Criteres (par ordre d importance) :
+    1. Taches done -> toujours en bas
+    2. Echeance depassee + priorite
+    3. Echeance aujourd hui + priorite
+    4. Echeance cette semaine + priorite
+    5. Priorite seule
+    6. Date de creation
+    """
+    now   = datetime.now()
+    today = now.date()
+    week  = today + timedelta(days=7)
+
+    # Taches terminees -> score eleve (en bas)
+    if task.status == "done":
+        return (99, 0, 0, task.created_at)
+
+    prio_score = PRIORITY_SCORE.get(task.priority, 1)
+
+    if task.reminder_at:
+        remind_date = task.reminder_at.date()
+
+        # Echeance depassee
+        if task.reminder_at < now and not task.reminder_fired:
+            return (0, 5 - prio_score, 0, task.created_at)
+
+        # Echeance aujourd hui
+        if remind_date == today:
+            return (1, 5 - prio_score, 0, task.created_at)
+
+        # Echeance cette semaine
+        if today < remind_date <= week:
+            return (2, 5 - prio_score, remind_date.toordinal(), task.created_at)
+
+        # Echeance future
+        return (3, 5 - prio_score, remind_date.toordinal(), task.created_at)
+
+    # Pas d echeance — trier par priorite puis date
+    return (4, 5 - prio_score, 0, task.created_at)
+
+
+def _get_badge(task: Task) -> tuple[str, str] | None:
+    """
+    Retourne (texte_badge, couleur) ou None.
+    Badges : EN RETARD / AUJOURD HUI / CETTE SEMAINE / DEMAIN
+    """
+    if not task.reminder_at or task.status == "done":
+        return None
+
+    now   = datetime.now()
+    today = now.date()
+    remind_date = task.reminder_at.date()
+
+    if task.reminder_at < now and not task.reminder_fired:
+        return ("⚠ EN RETARD", "#FF4444")
+
+    if remind_date == today:
+        return ("🔔 AUJOURD'HUI", "#FF8C00")
+
+    if remind_date == today + timedelta(days=1):
+        return ("📅 DEMAIN", "#FFD700")
+
+    if remind_date <= today + timedelta(days=7):
+        days_left = (remind_date - today).days
+        return (f"📅 J-{days_left}", "#32CD32")
+
+    return None
 
 
 class TaskPanel(ctk.CTkFrame):
@@ -39,6 +115,7 @@ class TaskPanel(ctk.CTkFrame):
         self._build()
 
     def _build(self):
+        # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=12, pady=(12, 6))
 
@@ -51,16 +128,34 @@ class TaskPanel(ctk.CTkFrame):
             height=32, corner_radius=8,
             command=self._open_add_form).pack(side="right")
 
+        # Filtres statut
         filter_row = ctk.CTkFrame(self, fg_color="transparent")
-        filter_row.pack(fill="x", padx=12, pady=(0, 6))
+        filter_row.pack(fill="x", padx=12, pady=(0, 4))
 
         self._status_var = ctk.StringVar(value="all")
-        for val, label in [("all","Toutes"),("todo","À faire"),
-                           ("in_progress","En cours"),("done","Terminées")]:
+        for val, label in [("all","Toutes"), ("todo","À faire"),
+                           ("in_progress","En cours"), ("done","Terminées")]:
             ctk.CTkRadioButton(filter_row, text=label,
                 variable=self._status_var, value=val,
                 command=lambda: self.refresh(self._cat_id)
             ).pack(side="left", padx=8)
+
+        # Légende badges
+        legend = ctk.CTkFrame(self, fg_color="transparent")
+        legend.pack(fill="x", padx=12, pady=(0, 4))
+        ctk.CTkLabel(legend, text="Tri intelligent :",
+            font=ctk.CTkFont(size=10), text_color="gray"
+        ).pack(side="left", padx=(0,6))
+        for text, color in [
+            ("⚠ EN RETARD","#FF4444"),
+            ("🔔 AUJOURD'HUI","#FF8C00"),
+            ("📅 DEMAIN","#FFD700"),
+            ("📅 J-N","#32CD32"),
+        ]:
+            ctk.CTkLabel(legend, text=text,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                text_color=color
+            ).pack(side="left", padx=6)
 
         _separator(self)
 
@@ -82,9 +177,22 @@ class TaskPanel(ctk.CTkFrame):
                      if kw in (t.title or "").lower()
                      or kw in (t.description or "").lower()]
 
+        # Tri intelligent
+        tasks = sorted(tasks, key=_smart_sort_key)
+
         cats = {c.id: c for c in get_categories()}
         cat_name = cats[category_id].name if category_id and category_id in cats else "Toutes"
-        self._title_label.configure(text=f"📋  {cat_name}  ({len(tasks)} tâche(s))")
+
+        # Compter les taches en retard
+        now      = datetime.now()
+        overdue  = sum(1 for t in tasks
+                       if t.reminder_at and t.reminder_at < now
+                       and not t.reminder_fired and t.status != "done")
+        overdue_str = f"  ⚠ {overdue} en retard" if overdue else ""
+
+        self._title_label.configure(
+            text=f"📋  {cat_name}  ({len(tasks)} tâche(s)){overdue_str}"
+        )
 
         for w in self._scroll.winfo_children():
             w.destroy()
@@ -92,30 +200,77 @@ class TaskPanel(ctk.CTkFrame):
         if not tasks:
             ctk.CTkLabel(self._scroll,
                 text="Aucune tâche ici. Clique sur ＋ pour commencer !",
-                text_color="gray", font=ctk.CTkFont(size=13)).pack(pady=40)
+                text_color="gray", font=ctk.CTkFont(size=13)
+            ).pack(pady=40)
             return
 
+        # Separateurs de groupe
+        last_group = None
+        GROUP_LABELS = {
+            0: ("⚠️  En retard",        "#FF4444"),
+            1: ("🔔  Aujourd'hui",       "#FF8C00"),
+            2: ("📅  Cette semaine",      "#FFD700"),
+            3: ("🗓️  Prochainement",      "#1E90FF"),
+            4: ("📋  Sans échéance",      "#888888"),
+            99: ("✅  Terminées",         "#32CD32"),
+        }
+
         for t in tasks:
+            group = _smart_sort_key(t)[0]
+            if group != last_group:
+                last_group = group
+                label_text, label_color = GROUP_LABELS.get(
+                    group, ("", "#888888"))
+                if label_text:
+                    grp_frame = ctk.CTkFrame(
+                        self._scroll, fg_color="transparent")
+                    grp_frame.pack(fill="x", padx=8, pady=(10, 2))
+                    ctk.CTkFrame(grp_frame, height=1,
+                        fg_color=label_color
+                    ).pack(fill="x", side="left", expand=True, padx=(0,8))
+                    ctk.CTkLabel(grp_frame, text=label_text,
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        text_color=label_color
+                    ).pack(side="left")
+                    ctk.CTkFrame(grp_frame, height=1,
+                        fg_color=label_color
+                    ).pack(fill="x", side="left", expand=True, padx=(8,0))
+
             self._make_card(t, cats)
 
     def _make_card(self, task: Task, cats: dict):
         icon, color              = PRIORITY_META.get(task.priority, ("🔵","#1E90FF"))
         s_icon, s_label, s_color = STATUS_META.get(task.status, ("📋","À faire","#888888"))
         cat                      = cats.get(task.category_id)
+        badge                    = _get_badge(task)
+
+        # Couleur bordure : rouge si en retard, sinon couleur priorite
+        border_color = "#FF4444" if (badge and "RETARD" in badge[0]) else color
 
         card = ctk.CTkFrame(self._scroll, corner_radius=10,
-                            border_width=1, border_color=color)
-        card.pack(fill="x", padx=8, pady=5)
+                            border_width=1, border_color=border_color)
+        card.pack(fill="x", padx=8, pady=4)
 
-        # ── Ligne 1 : priorité + titre + badge statut cliquable ──────────
+        # ── Ligne 1 : priorité + titre + badge échéance + statut ─────────────
         row1 = ctk.CTkFrame(card, fg_color="transparent")
         row1.pack(fill="x", padx=10, pady=(8, 2))
 
         ctk.CTkLabel(row1, text=icon, width=20).pack(side="left")
         ctk.CTkLabel(row1, text=task.title,
             font=ctk.CTkFont(size=13, weight="bold"),
-            anchor="w").pack(side="left", padx=6, fill="x", expand=True)
+            anchor="w"
+        ).pack(side="left", padx=6, fill="x", expand=True)
 
+        # Badge échéance (EN RETARD / AUJOURD HUI / DEMAIN / J-N)
+        if badge:
+            badge_text, badge_color = badge
+            ctk.CTkLabel(row1,
+                text=badge_text,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                text_color=badge_color
+            ).pack(side="right", padx=(4,6))
+
+        # Badge statut cliquable
         next_s = NEXT_STATUS[task.status]
         ctk.CTkButton(row1,
             text=f"{s_icon} {s_label}",
@@ -125,22 +280,18 @@ class TaskPanel(ctk.CTkFrame):
             hover_color=STATUS_META[next_s][2],
             text_color="white",
             command=lambda tid=task.id, ns=next_s: self._cycle_status(tid, ns)
-        ).pack(side="right", padx=(6, 0))
+        ).pack(side="right", padx=(0,0))
 
-        # ── Ligne 2 : description tronquée + toggle ───────────────────────
+        # ── Ligne 2 : description tronquée ───────────────────────────────────
         if task.description:
             desc_full  = task.description.strip()
-            # Version courte : on tronque et supprime les sauts de ligne
             desc_short = desc_full.replace("\n", " ")[:DESC_MAX_CHARS]
             is_long    = len(desc_full) > DESC_MAX_CHARS or "\n" in desc_full
 
-            # Conteneur de la description (1 seule ligne avec toggle)
             desc_row = ctk.CTkFrame(card, fg_color="transparent")
             desc_row.pack(fill="x", padx=36, pady=(0, 2))
 
-            # Label de description (gauche, expand)
-            desc_label = ctk.CTkLabel(
-                desc_row,
+            desc_label = ctk.CTkLabel(desc_row,
                 text=desc_short + ("..." if is_long else ""),
                 text_color="gray", anchor="w",
                 font=ctk.CTkFont(size=11),
@@ -149,23 +300,17 @@ class TaskPanel(ctk.CTkFrame):
 
             if is_long:
                 _state = {"expanded": False}
-
-                # Bouton toggle ancré à droite EN HAUT (side="top" dans un sous-frame)
-                toggle_btn = ctk.CTkButton(
-                    desc_row,
-                    text="▼ plus",
-                    width=60, height=18,
+                toggle_btn = ctk.CTkButton(desc_row,
+                    text="▼ plus", width=60, height=18,
                     fg_color="transparent",
-                    hover_color=("gray80", "gray25"),
+                    hover_color=("gray80","gray25"),
                     text_color="#1E90FF",
                     font=ctk.CTkFont(size=10),
-                    anchor="n"
-                )
-                toggle_btn.pack(side="right", anchor="n", padx=(4, 0))
+                    anchor="n")
+                toggle_btn.pack(side="right", anchor="n", padx=(4,0))
 
                 def _toggle(lbl=desc_label, btn=toggle_btn,
-                            full=desc_full, short=desc_short,
-                            state=_state):
+                            full=desc_full, short=desc_short, state=_state):
                     if state["expanded"]:
                         lbl.configure(text=short + "...", wraplength=500)
                         btn.configure(text="▼ plus")
@@ -174,10 +319,9 @@ class TaskPanel(ctk.CTkFrame):
                         lbl.configure(text=full, wraplength=500)
                         btn.configure(text="▲ moins")
                         state["expanded"] = True
-
                 toggle_btn.configure(command=_toggle)
 
-        # ── Ligne 3 : meta (catégorie, rappel) ───────────────────────────
+        # ── Ligne 3 : meta ────────────────────────────────────────────────────
         row3 = ctk.CTkFrame(card, fg_color="transparent")
         row3.pack(fill="x", padx=10, pady=(0, 4))
 
@@ -187,53 +331,45 @@ class TaskPanel(ctk.CTkFrame):
                 font=ctk.CTkFont(size=10)).pack(side="left", padx=4)
 
         if task.reminder_at:
-            fired = " ✓" if task.reminder_fired else ""
+            fired  = " ✓" if task.reminder_fired else ""
+            now    = datetime.now()
+            is_late = task.reminder_at < now and not task.reminder_fired
+            r_color = "#FF4444" if is_late else "#FFD700"
             ctk.CTkLabel(row3,
                 text=f"⏰ {task.reminder_at.strftime('%d/%m/%Y %H:%M')}{fired}",
-                text_color="#FFD700",
-                font=ctk.CTkFont(size=10)).pack(side="left", padx=8)
+                text_color=r_color,
+                font=ctk.CTkFont(size=10)
+            ).pack(side="left", padx=8)
 
-        # ── Ligne 4 : TOUTES les pièces jointes ──────────────────────────
+        # ── Ligne 4 : pièces jointes ──────────────────────────────────────────
         attachments = get_task_attachments(task)
         if attachments:
             att_frame = ctk.CTkFrame(card, fg_color="transparent")
             att_frame.pack(fill="x", padx=10, pady=(0, 4))
-
             for path in attachments:
                 if os.path.exists(path):
                     fname = os.path.basename(path)
-                    # Icône selon extension
-                    ext = os.path.splitext(fname)[1].lower()
-                    if ext == ".pdf":
-                        att_icon = "📕"
-                    elif ext in (".doc", ".docx"):
-                        att_icon = "📘"
-                    elif ext in (".xls", ".xlsx"):
-                        att_icon = "📗"
-                    elif ext in (".txt",):
-                        att_icon = "📄"
-                    elif ext in (".png", ".jpg", ".jpeg", ".gif"):
-                        att_icon = "🖼️"
-                    else:
-                        att_icon = "📎"
-
-                    ctk.CTkButton(
-                        att_frame,
+                    ext   = os.path.splitext(fname)[1].lower()
+                    icons = {".pdf":"📕",".docx":"📘",".doc":"📘",
+                             ".xlsx":"📗",".xls":"📗",".txt":"📄",
+                             ".png":"🖼️",".jpg":"🖼️",".jpeg":"🖼️"}
+                    att_icon = icons.get(ext, "📎")
+                    ctk.CTkButton(att_frame,
                         text=f"{att_icon} {fname}",
                         height=22, fg_color="transparent",
                         hover_color=("gray80","gray25"),
                         text_color="#88BBFF",
-                        font=ctk.CTkFont(size=10),
-                        anchor="w",
+                        font=ctk.CTkFont(size=10), anchor="w",
                         command=lambda p=path: os.startfile(p)
-                    ).pack(side="left", padx=(0, 6))
+                    ).pack(side="left", padx=(0,6))
 
-        # ── Boutons actions ──────────────────────────────────────────────
+        # ── Boutons actions ───────────────────────────────────────────────────
         actions = ctk.CTkFrame(card, fg_color="transparent")
         actions.pack(fill="x", padx=10, pady=(2, 6))
 
         ctk.CTkButton(actions, text="✏️ Éditer", width=80, height=26,
-            command=lambda t=task: self._open_edit_form(t)).pack(side="left", padx=4)
+            command=lambda t=task: self._open_edit_form(t)
+        ).pack(side="left", padx=4)
 
         ctk.CTkButton(actions, text="🗑 Supprimer", width=100, height=26,
             fg_color="#5a2a2a", hover_color="#8b0000",
