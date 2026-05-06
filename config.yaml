@@ -3,6 +3,8 @@ app:
   version: "1.3.0"
   theme: dark          # dark | light
   color_accent: "#1E90FF"
+  default_view: "kanban"   # Vue Kanban au démarrage
+  # default_view: "list"   # Vue liste au démarrage
 
 database:
   path: "data/quickmind.db"

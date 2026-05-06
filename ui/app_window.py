@@ -15,6 +15,9 @@ _cfg_path = Path(__file__).parent.parent / "config.yaml"
 with open(_cfg_path, "r", encoding="utf-8") as f:
     _cfg = yaml.safe_load(f)
 
+# Vue par defaut : kanban ou list
+_DEFAULT_VIEW = _cfg.get("app", {}).get("default_view", "kanban")
+
 
 class App(ctk.CTk):
     def __init__(self):
@@ -39,35 +42,48 @@ class App(ctk.CTk):
         self.selected_category_id = None
         self._ai_visible           = False
         self._update_dialog        = None
-        self._kanban_mode          = False
+        # Vue active selon config
+        self._kanban_mode = (_DEFAULT_VIEW == "kanban")
 
         # Sidebar
         self.sidebar = Sidebar(self, on_select=self._on_category_select)
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsw",
-                          padx=(10,0), pady=10)
+                          padx=(10, 0), pady=10)
 
         # Task panel (liste)
         self.task_panel = TaskPanel(self)
-        self.task_panel.grid(row=0, column=1, sticky="nsew",
-                             padx=10, pady=(10,4))
 
-        # Kanban panel (masque par defaut)
+        # Kanban panel
         self.kanban_panel = KanbanPanel(self)
+
+        # Afficher la vue par defaut
+        if self._kanban_mode:
+            self.kanban_panel.grid(row=0, column=1, sticky="nsew",
+                                   padx=10, pady=(10, 4))
+        else:
+            self.task_panel.grid(row=0, column=1, sticky="nsew",
+                                 padx=10, pady=(10, 4))
 
         # IA Panel
         self.ai_panel = AIPanel(self, on_action_done=self._on_ai_action)
 
         # Barre basse
-        self.prompt_bar = PromptBar(self,
+        self.prompt_bar = PromptBar(
+            self,
             on_submit=self._on_prompt,
             on_toggle_ai=self._toggle_ai,
             on_outlook=self._open_outlook,
             on_toggle_kanban=self._toggle_kanban,
+            kanban_active=self._kanban_mode,   # etat initial du bouton
         )
         self.prompt_bar.grid(row=2, column=0, columnspan=2,
-                             sticky="ew", padx=10, pady=(0,10))
+                             sticky="ew", padx=10, pady=(0, 10))
 
-        self.task_panel.refresh(category_id=None)
+        # Refresh initial
+        if self._kanban_mode:
+            self.kanban_panel.refresh(category_id=None)
+        else:
+            self.task_panel.refresh(category_id=None)
 
         # Verif mise a jour
         updater_cfg = _cfg.get("updater", {})
@@ -88,19 +104,19 @@ class App(ctk.CTk):
         if self._kanban_mode:
             self.task_panel.grid_forget()
             self.kanban_panel.grid(row=0, column=1, sticky="nsew",
-                                   padx=10, pady=(10,4))
+                                   padx=10, pady=(10, 4))
             self.kanban_panel.refresh(category_id=self.selected_category_id)
         else:
             self.kanban_panel.grid_forget()
             self.task_panel.grid(row=0, column=1, sticky="nsew",
-                                 padx=10, pady=(10,4))
+                                 padx=10, pady=(10, 4))
             self.task_panel.refresh(category_id=self.selected_category_id)
 
     def _toggle_ai(self):
         self._ai_visible = not self._ai_visible
         if self._ai_visible:
             self.ai_panel.grid(row=1, column=1, sticky="nsew",
-                               padx=10, pady=(0,4))
+                               padx=10, pady=(0, 4))
         else:
             self.ai_panel.grid_forget()
 
