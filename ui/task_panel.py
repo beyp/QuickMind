@@ -5,6 +5,7 @@ from core.database import (get_tasks, get_categories, add_task,
                            update_task, delete_task, get_task_attachments)
 from core.models import Task
 from ui.task_form import TaskForm
+from ui.recurrence_widget import RecurrenceWidget
 import os
 
 PRIORITY_META = {
@@ -341,6 +342,15 @@ class TaskPanel(ctk.CTkFrame):
                 text_color=r_color,
                 font=ctk.CTkFont(size=10)
             ).pack(side="left", padx=8)
+
+        # Badge recurrence
+        rec_text = RecurrenceWidget.format_recurrence(
+            task.recurrence, task.recurrence_days)
+        if rec_text:
+            ctk.CTkLabel(row3, text=rec_text,
+                text_color="#9370DB",
+                font=ctk.CTkFont(size=10)
+            ).pack(side="left", padx=4)
 
         # ── Ligne 4 : pièces jointes ──────────────────────────────────────────
         attachments = get_task_attachments(task)

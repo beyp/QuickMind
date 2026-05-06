@@ -1,10 +1,8 @@
-import yaml
-import json
-import sqlite3
+import yaml, json, sqlite3
 from pathlib import Path
 from sqlmodel import SQLModel, Session, create_engine, select
 from core.models import Category, Task, SubTask
-from datetime import datetime
+from datetime import datetime, timedelta
 
 _cfg_path = Path(__file__).parent.parent / "config.yaml"
 with open(_cfg_path, "r", encoding="utf-8") as f:
@@ -16,18 +14,19 @@ engine  = create_engine(f"sqlite:///{DB_PATH}", echo=False)
 
 
 def _migrate_db():
-    """Ajoute les colonnes et tables manquantes sans toucher aux donnees."""
     conn   = sqlite3.connect(str(DB_PATH))
     cursor = conn.cursor()
-
-    # Colonnes manquantes dans task
     cursor.execute("PRAGMA table_info(task)")
     existing_cols = {row[1] for row in cursor.fetchall()}
-    for col, col_type in [("attachments", "TEXT")]:
+    for col, col_type in [
+        ("attachments",     "TEXT"),
+        ("recurrence",      "TEXT"),
+        ("recurrence_days", "TEXT"),
+        ("recurrence_end",  "DATETIME"),
+    ]:
         if col not in existing_cols:
             cursor.execute(f"ALTER TABLE task ADD COLUMN {col} {col_type}")
             print(f"[Migration] Colonne ajoutee : task.{col}")
-
     conn.commit()
     conn.close()
 
@@ -46,25 +45,23 @@ def init_db():
             s.commit()
 
 
-# ── CATEGORIES ────────────────────────────────────────────────────────────────
-def get_categories() -> list[Category]:
+def get_categories():
     with Session(engine) as s:
         return s.exec(select(Category)).all()
 
-def add_category(name: str, color: str = "#1E90FF") -> Category:
+def add_category(name, color="#1E90FF"):
     with Session(engine) as s:
         cat = Category(name=name, color=color)
         s.add(cat); s.commit(); s.refresh(cat)
         return cat
 
-def delete_category(cat_id: int):
+def delete_category(cat_id):
     with Session(engine) as s:
         cat = s.get(Category, cat_id)
         if cat: s.delete(cat); s.commit()
 
 
-# ── TASKS ─────────────────────────────────────────────────────────────────────
-def get_tasks(category_id=None, status=None) -> list[Task]:
+def get_tasks(category_id=None, status=None):
     with Session(engine) as s:
         q = select(Task)
         if category_id is not None: q = q.where(Task.category_id == category_id)
@@ -72,15 +69,18 @@ def get_tasks(category_id=None, status=None) -> list[Task]:
         return s.exec(q.order_by(Task.created_at.desc())).all()
 
 def add_task(title, description="", category_id=None, priority="normal",
-             reminder_at=None, attachment_path=None) -> Task:
+             reminder_at=None, attachment_path=None,
+             recurrence=None, recurrence_days=None, recurrence_end=None):
     with Session(engine) as s:
-        t = Task(title=title, description=description, category_id=category_id,
-                 priority=priority, reminder_at=reminder_at,
-                 attachment_path=attachment_path)
+        t = Task(title=title, description=description,
+                 category_id=category_id, priority=priority,
+                 reminder_at=reminder_at, attachment_path=attachment_path,
+                 recurrence=recurrence, recurrence_days=recurrence_days,
+                 recurrence_end=recurrence_end)
         s.add(t); s.commit(); s.refresh(t)
         return t
 
-def update_task(task_id: int, **kwargs) -> Task | None:
+def update_task(task_id, **kwargs):
     with Session(engine) as s:
         t = s.get(Task, task_id)
         if not t: return None
@@ -89,56 +89,114 @@ def update_task(task_id: int, **kwargs) -> Task | None:
         s.add(t); s.commit(); s.refresh(t)
         return t
 
-def delete_task(task_id: int):
+def delete_task(task_id):
     with Session(engine) as s:
-        # Supprimer les sous-taches d abord
         subs = s.exec(select(SubTask).where(SubTask.task_id == task_id)).all()
         for sub in subs: s.delete(sub)
         t = s.get(Task, task_id)
         if t: s.delete(t)
         s.commit()
 
-def get_pending_reminders() -> list[Task]:
+def get_pending_reminders():
     now = datetime.now()
     with Session(engine) as s:
-        return s.exec(
-            select(Task)
+        return s.exec(select(Task)
             .where(Task.reminder_at <= now)
             .where(Task.reminder_fired == False)
-            .where(Task.reminder_at != None)
-        ).all()
+            .where(Task.reminder_at != None)).all()
 
-def mark_reminder_fired(task_id: int):
+def mark_reminder_fired(task_id):
     with Session(engine) as s:
         t = s.get(Task, task_id)
         if t: t.reminder_fired = True; s.add(t); s.commit()
 
 
-# ── SOUS-TACHES ───────────────────────────────────────────────────────────────
+DAYS_MAP = {"mon":0,"tue":1,"wed":2,"thu":3,"fri":4,"sat":5,"sun":6}
+
+def _next_recurrence_date(task):
+    if not task.recurrence or task.recurrence == "none":
+        return None
+    base = task.reminder_at or datetime.now()
+    now  = datetime.now()
+
+    if task.recurrence == "daily":
+        next_dt = base + timedelta(days=1)
+        while next_dt <= now: next_dt += timedelta(days=1)
+
+    elif task.recurrence == "weekly":
+        next_dt = base + timedelta(weeks=1)
+        while next_dt <= now: next_dt += timedelta(weeks=1)
+
+    elif task.recurrence == "monthly":
+        import calendar
+        next_dt = base
+        for _ in range(24):
+            m = next_dt.month + 1
+            y = next_dt.year + (1 if m > 12 else 0)
+            m = 1 if m > 12 else m
+            last = calendar.monthrange(y, m)[1]
+            next_dt = next_dt.replace(year=y, month=m,
+                                      day=min(base.day, last))
+            if next_dt > now: break
+
+    elif task.recurrence == "yearly":
+        next_dt = base
+        for _ in range(10):
+            try: next_dt = next_dt.replace(year=next_dt.year + 1)
+            except ValueError: next_dt = next_dt.replace(year=next_dt.year+1, day=28)
+            if next_dt > now: break
+
+    elif task.recurrence == "custom" and task.recurrence_days:
+        try:
+            days     = json.loads(task.recurrence_days)
+            day_nums = sorted([DAYS_MAP[d] for d in days if d in DAYS_MAP])
+        except Exception:
+            return None
+        if not day_nums: return None
+        next_dt = base + timedelta(days=1)
+        for _ in range(365):
+            if next_dt > now and next_dt.weekday() in day_nums: break
+            next_dt += timedelta(days=1)
+    else:
+        return None
+
+    if task.recurrence_end and next_dt > task.recurrence_end:
+        return None
+    return next_dt
+
+
+def create_next_recurrence(task_id):
+    with Session(engine) as s:
+        task = s.get(Task, task_id)
+        if not task or not task.recurrence or task.recurrence == "none":
+            return None
+    next_dt = _next_recurrence_date(task)
+    if not next_dt: return None
+    new_task = add_task(
+        title=task.title, description=task.description,
+        category_id=task.category_id, priority=task.priority,
+        reminder_at=next_dt, recurrence=task.recurrence,
+        recurrence_days=task.recurrence_days, recurrence_end=task.recurrence_end)
+    print(f"[Recurrence] #{new_task.id} cree pour {next_dt.strftime('%d/%m/%Y')}")
+    return new_task
+
+
 MAX_SUBTASKS = 10
 
-def get_subtasks(task_id: int) -> list[SubTask]:
+def get_subtasks(task_id):
     with Session(engine) as s:
-        return s.exec(
-            select(SubTask)
-            .where(SubTask.task_id == task_id)
-            .order_by(SubTask.position)
-        ).all()
+        return s.exec(select(SubTask).where(SubTask.task_id == task_id)
+                      .order_by(SubTask.position)).all()
 
-def add_subtask(task_id: int, title: str) -> SubTask | None:
-    """Ajoute une sous-tache. Retourne None si la limite est atteinte."""
+def add_subtask(task_id, title):
     with Session(engine) as s:
-        count = len(s.exec(
-            select(SubTask).where(SubTask.task_id == task_id)
-        ).all())
-        if count >= MAX_SUBTASKS:
-            return None
+        count = len(s.exec(select(SubTask).where(SubTask.task_id == task_id)).all())
+        if count >= MAX_SUBTASKS: return None
         sub = SubTask(task_id=task_id, title=title, position=count)
         s.add(sub); s.commit(); s.refresh(sub)
         return sub
 
-def toggle_subtask(subtask_id: int) -> SubTask | None:
-    """Bascule done/not done."""
+def toggle_subtask(subtask_id):
     with Session(engine) as s:
         sub = s.get(SubTask, subtask_id)
         if not sub: return None
@@ -146,35 +204,24 @@ def toggle_subtask(subtask_id: int) -> SubTask | None:
         s.add(sub); s.commit(); s.refresh(sub)
         return sub
 
-def delete_subtask(subtask_id: int):
+def delete_subtask(subtask_id):
     with Session(engine) as s:
         sub = s.get(SubTask, subtask_id)
         if sub: s.delete(sub); s.commit()
 
-def update_subtask_title(subtask_id: int, title: str) -> SubTask | None:
-    with Session(engine) as s:
-        sub = s.get(SubTask, subtask_id)
-        if not sub: return None
-        sub.title = title
-        s.add(sub); s.commit(); s.refresh(sub)
-        return sub
-
-def get_subtask_progress(task_id: int) -> tuple[int, int]:
-    """Retourne (done, total) pour la barre de progression."""
+def get_subtask_progress(task_id):
     subs  = get_subtasks(task_id)
     total = len(subs)
     done  = sum(1 for s in subs if s.done)
     return done, total
 
-def check_auto_complete(task_id: int):
-    """Si toutes les sous-taches sont done → passe la tache en done."""
+def check_auto_complete(task_id):
     done, total = get_subtask_progress(task_id)
     if total > 0 and done == total:
         update_task(task_id, status="done")
+        create_next_recurrence(task_id)
 
-
-# ── PIECES JOINTES MULTIPLES ──────────────────────────────────────────────────
-def get_task_attachments(task: Task) -> list[str]:
+def get_task_attachments(task):
     paths = []
     if task.attachments:
         try: paths = json.loads(task.attachments)
@@ -183,7 +230,7 @@ def get_task_attachments(task: Task) -> list[str]:
         paths.insert(0, task.attachment_path)
     return [p for p in paths if p]
 
-def set_task_attachments(task_id: int, paths: list[str]):
+def set_task_attachments(task_id, paths):
     clean = [p for p in paths if p]
     with Session(engine) as s:
         t = s.get(Task, task_id)

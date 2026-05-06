@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from ui.sidebar import Sidebar
 from ui.task_panel import TaskPanel
+from ui.kanban_panel import KanbanPanel
 from ui.prompt_bar import PromptBar
 from ui.ai_panel import AIPanel
 from ui.outlook_panel import OutlookPanel
@@ -24,8 +25,8 @@ class App(ctk.CTk):
 
         self.title("QuickMind  v" + _cfg["app"]["version"] +
                    "  —  IA locale Mistral + Outlook")
-        self.geometry("1100x780")
-        self.minsize(800, 600)
+        self.geometry("1200x800")
+        self.minsize(900, 600)
 
         init_db()
         start_scheduler()
@@ -38,29 +39,33 @@ class App(ctk.CTk):
         self.selected_category_id = None
         self._ai_visible           = False
         self._update_dialog        = None
+        self._kanban_mode          = False
 
         # Sidebar
         self.sidebar = Sidebar(self, on_select=self._on_category_select)
         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsw",
-                          padx=(10, 0), pady=10)
+                          padx=(10,0), pady=10)
 
-        # Task panel
+        # Task panel (liste)
         self.task_panel = TaskPanel(self)
         self.task_panel.grid(row=0, column=1, sticky="nsew",
-                             padx=10, pady=(10, 4))
+                             padx=10, pady=(10,4))
+
+        # Kanban panel (masque par defaut)
+        self.kanban_panel = KanbanPanel(self)
 
         # IA Panel
         self.ai_panel = AIPanel(self, on_action_done=self._on_ai_action)
 
         # Barre basse
-        self.prompt_bar = PromptBar(
-            self,
+        self.prompt_bar = PromptBar(self,
             on_submit=self._on_prompt,
             on_toggle_ai=self._toggle_ai,
             on_outlook=self._open_outlook,
+            on_toggle_kanban=self._toggle_kanban,
         )
         self.prompt_bar.grid(row=2, column=0, columnspan=2,
-                             sticky="ew", padx=10, pady=(0, 10))
+                             sticky="ew", padx=10, pady=(0,10))
 
         self.task_panel.refresh(category_id=None)
 
@@ -70,19 +75,32 @@ class App(ctk.CTk):
             print("[Updater] Verification dans 3 secondes...")
             self.after(3000, self._check_for_update)
 
-    def _open_file_dialog(self, path: str):
-        from ui.file_drop_dialog import FileDropDialog
-        FileDropDialog(self, file_path=path, on_task_created=self._on_ai_action)
-
     def _on_category_select(self, cat_id):
         self.selected_category_id = cat_id
-        self.task_panel.refresh(category_id=cat_id)
+        if self._kanban_mode:
+            self.kanban_panel.refresh(category_id=cat_id)
+        else:
+            self.task_panel.refresh(category_id=cat_id)
+
+    def _toggle_kanban(self):
+        """Bascule entre vue liste et vue Kanban."""
+        self._kanban_mode = not self._kanban_mode
+        if self._kanban_mode:
+            self.task_panel.grid_forget()
+            self.kanban_panel.grid(row=0, column=1, sticky="nsew",
+                                   padx=10, pady=(10,4))
+            self.kanban_panel.refresh(category_id=self.selected_category_id)
+        else:
+            self.kanban_panel.grid_forget()
+            self.task_panel.grid(row=0, column=1, sticky="nsew",
+                                 padx=10, pady=(10,4))
+            self.task_panel.refresh(category_id=self.selected_category_id)
 
     def _toggle_ai(self):
         self._ai_visible = not self._ai_visible
         if self._ai_visible:
             self.ai_panel.grid(row=1, column=1, sticky="nsew",
-                               padx=10, pady=(0, 4))
+                               padx=10, pady=(0,4))
         else:
             self.ai_panel.grid_forget()
 
@@ -90,7 +108,14 @@ class App(ctk.CTk):
         OutlookPanel(self, on_task_created=self._on_ai_action)
 
     def _on_ai_action(self):
-        self.task_panel.refresh(category_id=self.selected_category_id)
+        if self._kanban_mode:
+            self.kanban_panel.refresh(category_id=self.selected_category_id)
+        else:
+            self.task_panel.refresh(category_id=self.selected_category_id)
+
+    def _open_file_dialog(self, path: str):
+        from ui.file_drop_dialog import FileDropDialog
+        FileDropDialog(self, file_path=path, on_task_created=self._on_ai_action)
 
     def _on_prompt(self, text: str):
         txt = text.lower().strip()
