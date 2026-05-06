@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ui.subtask_widget import SubTaskWidget
 from datetime import datetime, timedelta
 from core.database import (get_tasks, get_categories, add_task,
                            update_task, delete_task, get_task_attachments)
@@ -362,6 +363,19 @@ class TaskPanel(ctk.CTkFrame):
                         font=ctk.CTkFont(size=10), anchor="w",
                         command=lambda p=path: os.startfile(p)
                     ).pack(side="left", padx=(0,6))
+
+        # ── Sous-taches ───────────────────────────────────────────────────────
+        sub_frame = ctk.CTkFrame(card,
+            fg_color=("gray92", "gray17"), corner_radius=6)
+        sub_frame.pack(fill="x", padx=10, pady=(0, 6))
+
+        SubTaskWidget(
+            sub_frame,
+            task_id=task.id,
+            task_title=task.title,
+            task_desc=task.description or "",
+            on_change=lambda: self.refresh(self._cat_id)
+        ).pack(fill="x", padx=8, pady=6)
 
         # ── Boutons actions ───────────────────────────────────────────────────
         actions = ctk.CTkFrame(card, fg_color="transparent")
