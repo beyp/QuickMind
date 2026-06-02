@@ -22,6 +22,16 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # Fix redraw multi-ecrans — desactiver scaling automatique CTk
+        try:
+            ctk.deactivate_automatic_dpi_awareness()
+        except Exception:
+            pass
+        try:
+            self.tk.call("tk", "scaling", 1.0)
+        except Exception:
+            pass
+
         ctk.set_appearance_mode(_cfg["app"]["theme"])
         ctk.set_default_color_theme("blue")
 
