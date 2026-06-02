@@ -83,6 +83,7 @@ class App(ctk.CTk):
             on_outlook=self._open_outlook,
             on_toggle_kanban=self._toggle_kanban,
             kanban_active=self._kanban_mode,
+            on_move_screen=self._move_to_screen,
         )
         self.prompt_bar.grid(row=2, column=0, columnspan=2,
                              sticky="ew", padx=10, pady=(0, 10))
@@ -195,6 +196,76 @@ class App(ctk.CTk):
                 print(f"[Updater] Erreur : {e}")
                 traceback.print_exc()
         threading.Thread(target=_run, daemon=True).start()
+
+    # ── Multi-ecrans ──────────────────────────────────────────────────────────
+    def _get_screens(self) -> list:
+        """Retourne la liste des ecrans via Win32 API."""
+        import ctypes
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left",   ctypes.c_long), ("top",    ctypes.c_long),
+                ("right",  ctypes.c_long), ("bottom", ctypes.c_long),
+            ]
+
+        monitors = []
+
+        def _callback(hMon, hdcMon, lpRect, lParam):
+            r = ctypes.cast(lpRect, ctypes.POINTER(RECT)).contents
+            monitors.append({
+                "x":      r.left,
+                "y":      r.top,
+                "width":  r.right  - r.left,
+                "height": r.bottom - r.top,
+            })
+            return True
+
+        MonitorEnumProc = ctypes.WINFUNCTYPE(
+            ctypes.c_bool,
+            ctypes.c_ulong, ctypes.c_ulong,
+            ctypes.POINTER(RECT),
+            ctypes.c_double,
+        )
+        ctypes.windll.user32.EnumDisplayMonitors(
+            None, None, MonitorEnumProc(_callback), 0)
+        return monitors
+
+    def _move_to_screen(self):
+        """
+        Teleporte QuickMind vers l ecran suivant en un clic.
+        Evite completement le freeze du drag & drop entre ecrans.
+        """
+        screens = self._get_screens()
+        if len(screens) < 2:
+            print("[Screen] Un seul ecran detecte.")
+            return
+
+        # Position actuelle
+        cur_x = self.winfo_x()
+        cur_y = self.winfo_y()
+        w     = self.winfo_width()
+        h     = self.winfo_height()
+
+        # Trouver l ecran actuel
+        cur_idx = 0
+        for i, s in enumerate(screens):
+            if (s["x"] <= cur_x < s["x"] + s["width"] and
+                    s["y"] <= cur_y < s["y"] + s["height"]):
+                cur_idx = i
+                break
+
+        # Ecran suivant (rotation)
+        nxt = screens[(cur_idx + 1) % len(screens)]
+
+        # Centrer sur le nouvel ecran
+        new_x = nxt["x"] + (nxt["width"]  - w) // 2
+        new_y = nxt["y"] + (nxt["height"] - h) // 2
+
+        # Teleportation instantanee — sans freeze !
+        self.geometry(f"{w}x{h}+{new_x}+{new_y}")
+        self.lift()   # remettre au premier plan
+        print(f"[Screen] Ecran {cur_idx+1} → Ecran {(cur_idx+1)%len(screens)+1} "
+              f"({nxt['width']}x{nxt['height']})")
 
     def _show_update_dialog(self, release: dict):
         try:
