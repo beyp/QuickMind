@@ -15,6 +15,10 @@ attachments:
 scheduler:
   check_interval_seconds: 30
 
+api:
+  port: 8765
+  enabled: true
+
 updater:
   enabled: true
   github_owner: "beyp"

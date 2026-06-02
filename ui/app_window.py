@@ -15,7 +15,6 @@ _cfg_path = Path(__file__).parent.parent / "config.yaml"
 with open(_cfg_path, "r", encoding="utf-8") as f:
     _cfg = yaml.safe_load(f)
 
-# Vue par defaut : kanban ou list
 _DEFAULT_VIEW = _cfg.get("app", {}).get("default_view", "kanban")
 
 
@@ -42,8 +41,7 @@ class App(ctk.CTk):
         self.selected_category_id = None
         self._ai_visible           = False
         self._update_dialog        = None
-        # Vue active selon config
-        self._kanban_mode = (_DEFAULT_VIEW == "kanban")
+        self._kanban_mode          = (_DEFAULT_VIEW == "kanban")
 
         # Sidebar
         self.sidebar = Sidebar(self, on_select=self._on_category_select)
@@ -74,7 +72,7 @@ class App(ctk.CTk):
             on_toggle_ai=self._toggle_ai,
             on_outlook=self._open_outlook,
             on_toggle_kanban=self._toggle_kanban,
-            kanban_active=self._kanban_mode,   # etat initial du bouton
+            kanban_active=self._kanban_mode,
         )
         self.prompt_bar.grid(row=2, column=0, columnspan=2,
                              sticky="ew", padx=10, pady=(0, 10))
@@ -85,12 +83,35 @@ class App(ctk.CTk):
         else:
             self.task_panel.refresh(category_id=None)
 
+        # Lancer l API REST apres que l UI soit prete
+        self.after(500, self._start_api)
+
         # Verif mise a jour
         updater_cfg = _cfg.get("updater", {})
         if updater_cfg.get("enabled", True) and updater_cfg.get("check_on_startup", True):
             print("[Updater] Verification dans 3 secondes...")
             self.after(3000, self._check_for_update)
 
+    # ── API REST ──────────────────────────────────────────────────────────────
+    def _start_api(self):
+        """Lance l API REST FastAPI en arriere-plan."""
+        api_cfg = _cfg.get("api", {})
+        if not api_cfg.get("enabled", True):
+            print("[API] Desactivee dans config.yaml")
+            return
+        try:
+            from core.api_server import start_api_server
+            port = api_cfg.get("port", 8765)
+            start_api_server(port=port, ui_callback=self._on_ai_action, tk_app=self)
+        except ImportError:
+            print("[API] fastapi/uvicorn non installes.")
+            print("[API] Lance : pip install fastapi uvicorn")
+        except Exception as e:
+            print(f"[API] Erreur demarrage : {e}")
+            import traceback
+            traceback.print_exc()
+
+    # ── Callbacks ─────────────────────────────────────────────────────────────
     def _on_category_select(self, cat_id):
         self.selected_category_id = cat_id
         if self._kanban_mode:
@@ -99,7 +120,6 @@ class App(ctk.CTk):
             self.task_panel.refresh(category_id=cat_id)
 
     def _toggle_kanban(self):
-        """Bascule entre vue liste et vue Kanban."""
         self._kanban_mode = not self._kanban_mode
         if self._kanban_mode:
             self.task_panel.grid_forget()
@@ -148,6 +168,7 @@ class App(ctk.CTk):
             self.task_panel.refresh(category_id=self.selected_category_id,
                                     keyword=text)
 
+    # ── Mise a jour ───────────────────────────────────────────────────────────
     def _check_for_update(self):
         print("[Updater] Lancement verification...")
         def _run():
