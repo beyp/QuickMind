@@ -6,19 +6,18 @@ from pathlib import Path
 class PromptBar(ctk.CTkFrame):
     def __init__(self, master, on_submit, on_toggle_ai=None,
                  on_outlook=None, on_toggle_kanban=None,
-                 kanban_active=False, on_move_screen=None):
+                 kanban_active=False):
         super().__init__(master, height=48, corner_radius=10)
         self.on_submit        = on_submit
         self.on_toggle_ai     = on_toggle_ai
         self.on_outlook       = on_outlook
         self.on_toggle_kanban = on_toggle_kanban
-        self.on_move_screen   = on_move_screen
         self._update_btn      = None
         self._kanban_active   = kanban_active
         self._build()
 
     def _build(self):
-        self.grid_columnconfigure(5, weight=1)
+        self.grid_columnconfigure(4, weight=1)
 
         # Bouton IA
         self._ai_btn = ctk.CTkButton(self, text="🤖 IA",
@@ -51,25 +50,16 @@ class PromptBar(ctk.CTkFrame):
             command=self._toggle_kanban)
         self._kanban_btn.grid(row=0, column=3, padx=(0, 6), pady=6)
 
-        # Bouton changer d ecran
-        self._screen_btn = ctk.CTkButton(self,
-            text="🖥️",
-            width=40, height=36,
-            fg_color="#2a2a3a", hover_color="#4a4a6a",
-            font=ctk.CTkFont(size=16),
-            command=self._move_screen
-        )
-        self._screen_btn.grid(row=0, column=4, padx=(0, 4), pady=6)
 
         # Champ de recherche
         self._entry = ctk.CTkEntry(self, height=36,
             placeholder_text="Recherche rapide : urgent, a faire, rapport...",
             font=ctk.CTkFont(size=12))
-        self._entry.grid(row=0, column=5, sticky="ew", padx=(0, 8), pady=6)
+        self._entry.grid(row=0, column=4, sticky="ew", padx=(0, 8), pady=6)
         self._entry.bind("<Return>", lambda e: self._submit())
 
         ctk.CTkButton(self, text="Chercher", width=90, height=36,
-            command=self._submit).grid(row=0, column=6, padx=(0, 6), pady=6)
+            command=self._submit).grid(row=0, column=5, padx=(0, 6), pady=6)
 
         # Badge mise a jour (masque par defaut)
         self._update_btn = ctk.CTkButton(self, text="", width=0, height=36,
@@ -132,7 +122,7 @@ class PromptBar(ctk.CTkFrame):
         self._update_btn.configure(
             text=f"⬆️ v{version}", width=90,
             command=lambda: self._on_update_click(version))
-        self._update_btn.grid(row=0, column=7, padx=(0, 10), pady=6)
+        self._update_btn.grid(row=0, column=6, padx=(0, 10), pady=6)
 
     def _on_update_click(self, version: str):
         from core.updater import check_for_update
@@ -140,11 +130,6 @@ class PromptBar(ctk.CTkFrame):
         release = check_for_update()
         if release:
             UpdateDialog(self.master, release_info=release)
-
-    def _move_screen(self):
-        """Teleporte la fenetre vers l ecran suivant."""
-        if self.on_move_screen:
-            self.on_move_screen()
 
     def _submit(self):
         text = self._entry.get().strip()

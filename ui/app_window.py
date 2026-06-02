@@ -22,15 +22,12 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Fix redraw multi-ecrans — desactiver scaling automatique CTk
+        # Fix redraw multi-ecrans
         try:
             ctk.deactivate_automatic_dpi_awareness()
         except Exception:
             pass
-        try:
-            self.tk.call("tk", "scaling", 1.0)
-        except Exception:
-            pass
+        # Appliquer DPI+font_scale au demarrage (sans toucher taille/position)
 
         ctk.set_appearance_mode(_cfg["app"]["theme"])
         ctk.set_default_color_theme("blue")
@@ -83,7 +80,6 @@ class App(ctk.CTk):
             on_outlook=self._open_outlook,
             on_toggle_kanban=self._toggle_kanban,
             kanban_active=self._kanban_mode,
-            on_move_screen=self._move_to_screen,
         )
         self.prompt_bar.grid(row=2, column=0, columnspan=2,
                              sticky="ew", padx=10, pady=(0, 10))
@@ -230,42 +226,223 @@ class App(ctk.CTk):
             None, None, MonitorEnumProc(_callback), 0)
         return monitors
 
+    def _get_screen_dpi(self) -> float:
+        """Recupere le DPI reel de l ecran actuel."""
+        try:
+            import ctypes
+            hwnd = self.winfo_id()
+            hmon = ctypes.windll.user32.MonitorFromWindow(hwnd, 2)
+            dpi_x = ctypes.c_uint()
+            dpi_y = ctypes.c_uint()
+            ctypes.windll.shcore.GetDpiForMonitor(
+                hmon, 0, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
+            factor = dpi_x.value / 96.0
+            print(f"[DPI] DPI={dpi_x.value} factor={factor:.2f}")
+            return round(factor, 2)
+        except Exception as e:
+            print(f"[DPI] Fallback 1.0 : {e}")
+            return 1.0
+
+    def _apply_dpi_scaling_only(self):
+        """
+        Au demarrage : le scaling a deja ete applique dans main.py.
+        Cette methode ne fait rien — conservee pour compatibilite.
+        """
+        print("[DPI] Scaling pre-applique dans main.py — OK")
+
+    def _apply_screen_scaling(self):
+        """
+        Appele APRES un basculement d ecran.
+        Recalcule le scaling si le nouvel ecran a un DPI different.
+        Minimal pour rester fluide : on ne change le scaling QUE si le DPI change.
+        """
+        factor     = self._get_screen_dpi()
+        font_scale = _cfg.get("app", {}).get("font_scale", 1.2)
+        new_widget = round(factor * font_scale, 2)
+        new_window = round(factor, 2)
+
+        try:
+            import customtkinter as ctk
+            # Lire le scaling actuel
+            current = ctk.ScalingTracker.get_widget_scaling(self)
+            if abs(current - new_widget) > 0.05:
+                # DPI different → mettre a jour (provoque un redraw)
+                ctk.set_widget_scaling(new_widget)
+                ctk.set_window_scaling(new_window)
+                print(f"[DPI] Basculement : {current:.2f} -> {new_widget:.2f}")
+            else:
+                print(f"[DPI] Meme DPI ({new_widget:.2f}) — pas de redraw")
+        except Exception as e:
+            print(f"[DPI] Erreur basculement scaling : {e}")
+
+    # ── Multi-ecrans ──────────────────────────────────────────────────────────
+    def _get_screens(self) -> list:
+        """Retourne la liste des ecrans via Win32 API."""
+        import ctypes
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left",   ctypes.c_long), ("top",    ctypes.c_long),
+                ("right",  ctypes.c_long), ("bottom", ctypes.c_long),
+            ]
+
+        monitors = []
+
+        def _callback(hMon, hdcMon, lpRect, lParam):
+            r = ctypes.cast(lpRect, ctypes.POINTER(RECT)).contents
+            monitors.append({
+                "x":      r.left,
+                "y":      r.top,
+                "width":  r.right  - r.left,
+                "height": r.bottom - r.top,
+            })
+            return True
+
+        MonitorEnumProc = ctypes.WINFUNCTYPE(
+            ctypes.c_bool,
+            ctypes.c_ulong, ctypes.c_ulong,
+            ctypes.POINTER(RECT),
+            ctypes.c_double,
+        )
+        ctypes.windll.user32.EnumDisplayMonitors(
+            None, None, MonitorEnumProc(_callback), 0)
+        return monitors
+
+    def _get_screen_dpi(self) -> float:
+        """Recupere le DPI reel de l ecran actuel."""
+        try:
+            import ctypes
+            hwnd = self.winfo_id()
+            hmon = ctypes.windll.user32.MonitorFromWindow(hwnd, 2)
+            dpi_x = ctypes.c_uint()
+            dpi_y = ctypes.c_uint()
+            ctypes.windll.shcore.GetDpiForMonitor(
+                hmon, 0, ctypes.byref(dpi_x), ctypes.byref(dpi_y))
+            factor = dpi_x.value / 96.0
+            print(f"[DPI] DPI={dpi_x.value} factor={factor:.2f}")
+            return round(factor, 2)
+        except Exception as e:
+            print(f"[DPI] Fallback 1.0 : {e}")
+            return 1.0
+
+    def _apply_dpi_scaling_only(self):
+        """
+        Au demarrage : le scaling a deja ete applique dans main.py.
+        Cette methode ne fait rien — conservee pour compatibilite.
+        """
+        print("[DPI] Scaling pre-applique dans main.py — OK")
+
+    def _apply_screen_scaling(self):
+        """
+        Appele APRES un basculement d ecran.
+        Applique le DPI + font_scale du nouvel ecran via CustomTkinter.
+        Le centrage a deja ete fait dans _move_to_screen.
+        """
+        factor     = self._get_screen_dpi()
+        font_scale = _cfg.get("app", {}).get("font_scale", 1.2)
+        final      = round(factor * font_scale, 2)
+        try:
+            ctk.set_widget_scaling(final)
+            ctk.set_window_scaling(factor)
+            print(f"[DPI] Post-basculement : widget={final} window={factor}")
+        except Exception as e:
+            print(f"[DPI] Erreur scaling : {e}")
+            try:
+                self.tk.call("tk", "scaling", final)
+            except Exception:
+                pass
+
     def _move_to_screen(self):
         """
-        Teleporte QuickMind vers l ecran suivant en un clic.
-        Evite completement le freeze du drag & drop entre ecrans.
+        Teleporte QuickMind vers l ecran suivant.
+        Strategie plein ecran :
+          - Si zoomed : on teleporte DIRECTEMENT en plein ecran sur l autre ecran
+            sans passer par normal (evite tous les redraws intermediaires)
+          - Si normal : on teleporte a 80% centre
         """
         screens = self._get_screens()
         if len(screens) < 2:
             print("[Screen] Un seul ecran detecte.")
             return
 
-        # Position actuelle
-        cur_x = self.winfo_x()
-        cur_y = self.winfo_y()
-        w     = self.winfo_width()
-        h     = self.winfo_height()
+        is_zoomed = self.state() == "zoomed"
 
-        # Trouver l ecran actuel
-        cur_idx = 0
-        for i, s in enumerate(screens):
-            if (s["x"] <= cur_x < s["x"] + s["width"] and
-                    s["y"] <= cur_y < s["y"] + s["height"]):
-                cur_idx = i
-                break
+        if is_zoomed:
+            # ── Plein ecran → plein ecran sur l autre ecran ───────────────────
+            # Detecter l ecran actuel via la position sauvegardee
+            # (winfo_x en mode zoomed retourne la position avant maximisation)
+            # On utilise le centre de l ecran actuel comme reference
+            screens_sorted = screens
 
-        # Ecran suivant (rotation)
-        nxt = screens[(cur_idx + 1) % len(screens)]
+            # Trouver sur quel ecran on est en mode zoomed
+            # En mode zoomed, winfo_x/y peuvent etre negatifs ou incorrects
+            # On utilise GetCursorPos pour savoir ou est la souris
+            try:
+                import ctypes
+                class POINT(ctypes.Structure):
+                    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+                pt = POINT()
+                ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+                mouse_x, mouse_y = pt.x, pt.y
+            except Exception:
+                mouse_x = self.winfo_x() + self.winfo_width()  // 2
+                mouse_y = self.winfo_y() + self.winfo_height() // 2
 
-        # Centrer sur le nouvel ecran
-        new_x = nxt["x"] + (nxt["width"]  - w) // 2
-        new_y = nxt["y"] + (nxt["height"] - h) // 2
+            cur_idx = 0
+            for i, s in enumerate(screens):
+                if (s["x"] <= mouse_x < s["x"] + s["width"] and
+                        s["y"] <= mouse_y < s["y"] + s["height"]):
+                    cur_idx = i
+                    break
 
-        # Teleportation instantanee — sans freeze !
-        self.geometry(f"{w}x{h}+{new_x}+{new_y}")
-        self.lift()   # remettre au premier plan
-        print(f"[Screen] Ecran {cur_idx+1} → Ecran {(cur_idx+1)%len(screens)+1} "
-              f"({nxt['width']}x{nxt['height']})")
+            nxt_idx = (cur_idx + 1) % len(screens)
+            nxt     = screens[nxt_idx]
+
+            # Teleporter en plein ecran sur l ecran cible :
+            # 1. Quitter zoomed SILENCIEUSEMENT (withdraw masque la fenetre)
+            self.withdraw()
+            self.state("normal")
+            # 2. Positionner sur l ecran cible
+            self.geometry(
+                f"{nxt['width']}x{nxt['height']}"
+                f"+{nxt['x']}+{nxt['y']}"
+            )
+            # 3. Remettre en plein ecran DIRECTEMENT
+            self.deiconify()
+            self.state("zoomed")
+
+            print(f"[Screen] Zoomed Ecran {cur_idx+1} -> Ecran {nxt_idx+1} "
+                  f"({nxt['width']}x{nxt['height']})")
+
+        else:
+            # ── Mode normal → 80% centre sur l ecran suivant ──────────────────
+            self.update_idletasks()
+
+            win_cx = self.winfo_x() + self.winfo_width()  // 2
+            win_cy = self.winfo_y() + self.winfo_height() // 2
+
+            cur_idx = 0
+            for i, s in enumerate(screens):
+                if (s["x"] <= win_cx < s["x"] + s["width"] and
+                        s["y"] <= win_cy < s["y"] + s["height"]):
+                    cur_idx = i
+                    break
+
+            nxt_idx = (cur_idx + 1) % len(screens)
+            nxt     = screens[nxt_idx]
+
+            new_w = int(nxt["width"]  * 0.80)
+            new_h = int(nxt["height"] * 0.80)
+            new_x = nxt["x"] + (nxt["width"]  - new_w) // 2
+            new_y = nxt["y"] + (nxt["height"] - new_h) // 2
+
+            self.geometry(f"{new_w}x{new_h}+{new_x}+{new_y}")
+            self.lift()
+            print(f"[Screen] Normal Ecran {cur_idx+1} -> Ecran {nxt_idx+1} | "
+                  f"{new_w}x{new_h} centre")
+
+        # Appliquer le scaling DPI uniquement si l ecran a un DPI different
+        self.after(300, self._apply_screen_scaling)
 
     def _show_update_dialog(self, release: dict):
         try:
