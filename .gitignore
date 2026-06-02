@@ -224,3 +224,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 debug_update.py
+
+# Zip and bak
+*.zip
+*.ps1.bak

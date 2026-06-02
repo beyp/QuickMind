@@ -44,14 +44,30 @@ function Test-QuickMind {
     }
 }
 
+function Invoke-QMPost {
+    param([string]$Endpoint, [hashtable]$Data)
+    # Serialisation manuelle du JSON pour eviter les problemes de guillemets
+    $pairs = $Data.GetEnumerator() | ForEach-Object {
+        $val = $_.Value
+        if ($null -eq $val) {
+            '"{0}": null' -f $_.Key
+        } else {
+            $escaped = $val.ToString() -replace '\\', '\\\\' -replace '"', '\"'
+            '"{0}": "{1}"' -f $_.Key, $escaped
+        }
+    }
+    $json = "{" + ($pairs -join ", ") + "}"
+    return Invoke-RestMethod -Uri "$API$Endpoint" -Method POST -Body $json -ContentType "application/json; charset=utf-8"
+}
+
 # ── HEALTH ────────────────────────────────────────────────────────────────────
 if ($Command -eq "health") {
     $h = Test-QuickMind
     if ($h) {
-        Write-Host "OK QuickMind actif - $($h.tasks) tache(s)" -ForegroundColor Green
+        Write-Host "  OK QuickMind actif - $($h.tasks) tache(s)" -ForegroundColor Green
     } else {
-        Write-Host "ERREUR QuickMind ne repond pas sur $API" -ForegroundColor Red
-        Write-Host "Lance QuickMind puis reessaie." -ForegroundColor Yellow
+        Write-Host "  ERREUR QuickMind ne repond pas sur $API" -ForegroundColor Red
+        Write-Host "  Lance QuickMind puis reessaie." -ForegroundColor Yellow
     }
     exit
 }
@@ -60,9 +76,9 @@ if ($Command -eq "health") {
 if ($Command -eq "" -or $Command -eq "help") {
     $h = Test-QuickMind
     if ($h) {
-        Write-Host "OK QuickMind actif - $($h.tasks) tache(s)" -ForegroundColor Green
+        Write-Host "  OK QuickMind actif - $($h.tasks) tache(s)" -ForegroundColor Green
     } else {
-        Write-Host "ATTENTION QuickMind hors ligne" -ForegroundColor Yellow
+        Write-Host "  ATTENTION QuickMind hors ligne" -ForegroundColor Yellow
     }
     Show-Help
     exit
@@ -71,29 +87,26 @@ if ($Command -eq "" -or $Command -eq "help") {
 # ── LIST ──────────────────────────────────────────────────────────────────────
 if ($Command -eq "list" -or $Command -eq "ls") {
     try {
-        $url = "$API/tasks"
-        $params_list = @{}
-        if ($p -ne "normal" -and $p -ne "") { $params_list["priority"] = $p }
-        if ($c -ne "") { $params_list["category"] = $c }
-
-        $uri = $url
-        if ($params_list.Count -gt 0) {
-            $qs = ($params_list.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join "&"
-            $uri = "$url?$qs"
-        }
+        $uri = "$API/tasks"
+        $qs  = @()
+        if ($p -ne "normal" -and $p -ne "") { $qs += "priority=$p" }
+        if ($c -ne "") { $qs += "category=$c" }
+        if ($qs.Count -gt 0) { $uri += "?" + ($qs -join "&") }
 
         $tasks = Invoke-RestMethod -Uri $uri -Method GET
         if ($tasks.Count -eq 0) {
-            Write-Host "Aucune tache trouvee." -ForegroundColor Gray
+            Write-Host "  Aucune tache trouvee." -ForegroundColor Gray
         } else {
             Write-Host ""
             Write-Host ("  {0,-4} {1,-32} {2,-8} {3,-12} {4}" -f "ID","Titre","Priorite","Statut","Categorie") -ForegroundColor Cyan
-            Write-Host ("  {0,-4} {1,-32} {2,-8} {3,-12} {4}" -f "----","--------------------------------","--------","------------","----------") -ForegroundColor DarkGray
+            Write-Host ("  {0}" -f ("-" * 72)) -ForegroundColor DarkGray
             foreach ($t in $tasks) {
-                $pcolor = "White"
-                if ($t.priority -eq "urgent") { $pcolor = "Red" }
-                elseif ($t.priority -eq "high") { $pcolor = "Yellow" }
-                elseif ($t.priority -eq "low")  { $pcolor = "DarkGray" }
+                $pcolor = switch ($t.priority) {
+                    "urgent" { "Red" }
+                    "high"   { "Yellow" }
+                    "low"    { "DarkGray" }
+                    default  { "White" }
+                }
                 $titleShort = if ($t.title.Length -gt 30) { $t.title.Substring(0,30) + "..." } else { $t.title }
                 Write-Host ("  {0,-4} {1,-32} {2,-8} {3,-12} {4}" -f "#$($t.id)", $titleShort, $t.priority, $t.status, $t.category) -ForegroundColor $pcolor
             }
@@ -101,73 +114,63 @@ if ($Command -eq "list" -or $Command -eq "ls") {
             Write-Host "  $($tasks.Count) tache(s)" -ForegroundColor Gray
         }
     } catch {
-        Write-Host "ERREUR $_" -ForegroundColor Red
+        Write-Host "  ERREUR $_" -ForegroundColor Red
     }
     exit
 }
 
 # ── DONE ──────────────────────────────────────────────────────────────────────
 if ($Command -eq "done") {
-    if ($Arg2 -eq "") {
-        Write-Host "Usage : .\qm.ps1 done <ID>" -ForegroundColor Yellow
-        exit
-    }
+    if ($Arg2 -eq "") { Write-Host "  Usage : .\qm.ps1 done <ID>" -ForegroundColor Yellow; exit }
     try {
         Invoke-RestMethod -Uri "$API/task/$Arg2/done" -Method POST | Out-Null
-        Write-Host "OK Tache #$Arg2 marquee comme terminee." -ForegroundColor Green
+        Write-Host "  OK Tache #$Arg2 terminee." -ForegroundColor Green
     } catch {
-        Write-Host "ERREUR $_" -ForegroundColor Red
-    }
-    exit
-}
-
-# ── AI ────────────────────────────────────────────────────────────────────────
-if ($Command -eq "ai") {
-    if ($Arg2 -eq "") {
-        Write-Host "Usage : .\qm.ps1 ai `"texte libre`"" -ForegroundColor Yellow
-        exit
-    }
-    try {
-        Write-Host "Mistral analyse..." -ForegroundColor Cyan
-        $bodyObj = @{ text = $Arg2 }
-        $bodyJson = $bodyObj | ConvertTo-Json -Compress
-        $res = Invoke-RestMethod -Uri "$API/task/ai" -Method POST -Body $bodyJson -ContentType "application/json"
-        Write-Host "OK $($res.result)" -ForegroundColor Green
-    } catch {
-        Write-Host "ERREUR $_" -ForegroundColor Red
+        Write-Host "  ERREUR $_" -ForegroundColor Red
     }
     exit
 }
 
 # ── DELETE ────────────────────────────────────────────────────────────────────
 if ($Command -eq "delete" -or $Command -eq "rm") {
-    if ($Arg2 -eq "") {
-        Write-Host "Usage : .\qm.ps1 delete <ID>" -ForegroundColor Yellow
-        exit
-    }
+    if ($Arg2 -eq "") { Write-Host "  Usage : .\qm.ps1 delete <ID>" -ForegroundColor Yellow; exit }
     try {
         Invoke-RestMethod -Uri "$API/task/$Arg2" -Method DELETE | Out-Null
-        Write-Host "OK Tache #$Arg2 supprimee." -ForegroundColor Green
+        Write-Host "  OK Tache #$Arg2 supprimee." -ForegroundColor Green
     } catch {
-        Write-Host "ERREUR $_" -ForegroundColor Red
+        Write-Host "  ERREUR $_" -ForegroundColor Red
+    }
+    exit
+}
+
+# ── AI ────────────────────────────────────────────────────────────────────────
+if ($Command -eq "ai") {
+    if ($Arg2 -eq "") { Write-Host "  Usage : .\qm.ps1 ai `"texte`"" -ForegroundColor Yellow; exit }
+    try {
+        Write-Host "  Mistral analyse..." -ForegroundColor Cyan
+        # Utiliser Invoke-QMPost pour gerer les guillemets et caracteres speciaux
+        $res = Invoke-QMPost -Endpoint "/task/ai" -Data @{ text = $Arg2 }
+        Write-Host "  OK $($res.result)" -ForegroundColor Green
+    } catch {
+        Write-Host "  ERREUR $_" -ForegroundColor Red
+        Write-Host "  Verifiez que QuickMind et Ollama tournent." -ForegroundColor Yellow
     }
     exit
 }
 
 # ── CREER TACHE (defaut) ──────────────────────────────────────────────────────
 try {
-    $bodyObj = @{
+    $data = @{
         title       = $Command
         description = $d
         category    = $c
         priority    = $p
     }
-    if ($r -ne "") { $bodyObj["reminder"] = $r }
+    if ($r -ne "") { $data["reminder"] = $r }
 
-    $bodyJson = $bodyObj | ConvertTo-Json -Compress
-    $res = Invoke-RestMethod -Uri "$API/task" -Method POST -Body $bodyJson -ContentType "application/json"
-    Write-Host "OK Tache #$($res.id) creee : $($res.title)" -ForegroundColor Green
+    $res = Invoke-QMPost -Endpoint "/task" -Data $data
+    Write-Host "  OK Tache #$($res.id) creee : $($res.title)" -ForegroundColor Green
 } catch {
-    Write-Host "ERREUR $_" -ForegroundColor Red
-    Write-Host "QuickMind tourne-t-il ? Lance : .\qm.ps1 health" -ForegroundColor Yellow
+    Write-Host "  ERREUR $_" -ForegroundColor Red
+    Write-Host "  QuickMind tourne-t-il ? Lance : .\qm.ps1 health" -ForegroundColor Yellow
 }
