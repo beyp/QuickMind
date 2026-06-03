@@ -45,7 +45,7 @@ EXCLUDE = {
     "*.spec",
 }
 
-EXCLUDE_EXTENSIONS = {".pyc", ".pyo", ".db"}
+EXCLUDE_EXTENSIONS = {".pyc", ".pyo", ".db", ".zip"}
 
 
 def should_exclude(path: Path) -> bool:
