@@ -62,9 +62,11 @@ class TaskForm(ctk.CTkToplevel):
         self._desc_e.bind("<Control-v>", self._on_ctrl_v)
         self._desc_e.bind("<Control-V>", self._on_ctrl_v)
 
+        # Zone miniatures — masquee par defaut, visible seulement si image collee
         self._thumbs_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._thumbs_frame.pack(fill="x", padx=16, pady=(0, 4))
+        # NE PAS pack ici — sera affiche seulement quand une image est collee
         self._thumb_refs = []
+        self._thumbs_visible = False
 
         # Categorie
         ctk.CTkLabel(scroll, text="Categorie", anchor="w").pack(fill="x", **pad)
@@ -205,6 +207,10 @@ class TaskForm(ctk.CTkToplevel):
             thumb = get_thumbnail(thumb_path)
             if not thumb: return
             self._thumb_refs.append(thumb)
+            # Afficher le conteneur seulement si premiere image
+            if not self._thumbs_visible:
+                self._thumbs_frame.pack(fill="x", padx=16, pady=(0, 4))
+                self._thumbs_visible = True
             thumb_frame = ctk.CTkFrame(self._thumbs_frame,
                 fg_color=("gray85","gray20"), corner_radius=6)
             thumb_frame.pack(side="left", padx=4, pady=4)
