@@ -9,6 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+# ✅ Imports globaux — disponibles partout
+from core.database import (
+    init_db, get_tasks, get_categories, add_task,
+    update_task as db_update_task, delete_task,
+    get_subtasks, add_subtask, toggle_subtask,
+    delete_subtask, get_subtask_progress,
+    check_auto_complete, create_next_recurrence,
+    get_task_attachments,
+)
 
 
 class TaskCreate(BaseModel):
