@@ -2,7 +2,9 @@ import customtkinter as ctk
 from ui.subtask_widget import SubTaskWidget
 from datetime import datetime, timedelta
 from core.database import (get_tasks, get_categories, add_task,
-                           update_task, delete_task, get_task_attachments)
+                           update_task, delete_task, get_task_attachments,
+                           archive_all_done, delete_all_done,
+                           get_archived_tasks, get_done_count)
 from core.models import Task
 from ui.task_form import TaskForm
 from ui.recurrence_widget import RecurrenceWidget
@@ -159,6 +161,40 @@ class TaskPanel(ctk.CTkFrame):
                 text_color=color
             ).pack(side="left", padx=6)
 
+        # ── Barre actions taches terminees ────────────────────────────────────
+        actions_row = ctk.CTkFrame(self, fg_color="transparent")
+        actions_row.pack(fill="x", padx=12, pady=(0, 4))
+
+        self._done_count_label = ctk.CTkLabel(
+            actions_row, text="",
+            font=ctk.CTkFont(size=11), text_color="#32CD32"
+        )
+        self._done_count_label.pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(actions_row,
+            text="📦 Archiver terminées",
+            height=26, width=165,
+            fg_color="#2a3a2a", hover_color="#3a5a3a",
+            font=ctk.CTkFont(size=11),
+            command=self._archive_done
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(actions_row,
+            text="🗑 Supprimer terminées",
+            height=26, width=170,
+            fg_color="#3a1a1a", hover_color="#5a2a2a",
+            font=ctk.CTkFont(size=11),
+            command=self._delete_done
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(actions_row,
+            text="🗂 Archives",
+            height=26, width=90,
+            fg_color="#2a2a3a", hover_color="#3a3a6a",
+            font=ctk.CTkFont(size=11),
+            command=self._show_archives
+        ).pack(side="left")
+
         _separator(self)
 
         self._scroll = ctk.CTkScrollableFrame(self, corner_radius=0)
@@ -198,6 +234,16 @@ class TaskPanel(ctk.CTkFrame):
 
         for w in self._scroll.winfo_children():
             w.destroy()
+
+        # Mettre a jour le compteur des terminées
+        done_count = get_done_count(category_id=category_id)
+        if done_count > 0:
+            self._done_count_label.configure(
+                text=f"✅ {done_count} terminée(s)",
+                text_color="#32CD32"
+            )
+        else:
+            self._done_count_label.configure(text="")
 
         if not tasks:
             ctk.CTkLabel(self._scroll,
@@ -405,6 +451,33 @@ class TaskPanel(ctk.CTkFrame):
         update_task(task_id, status=new_status)
         self.refresh(self._cat_id)
 
+    def _archive_done(self):
+        """Archive toutes les taches terminees."""
+        count = archive_all_done(category_id=self._cat_id)
+        self.refresh(self._cat_id)
+        print(f"[Archive] {count} tache(s) archivee(s)")
+
+    def _delete_done(self):
+        """Supprime definitivement les taches terminees."""
+        import tkinter.messagebox as mb
+        count = get_done_count(category_id=self._cat_id)
+        if count == 0:
+            return
+        if mb.askyesno(
+            "Confirmer la suppression",
+            f"Supprimer definitivement {count} tache(s) terminee(s) ?\n"
+            "Cette action est irreversible.",
+            icon="warning"
+        ):
+            deleted = delete_all_done(category_id=self._cat_id)
+            self.refresh(self._cat_id)
+            print(f"[Archive] {deleted} tache(s) supprimee(s)")
+
+    def _show_archives(self):
+        """Ouvre la fenetre des taches archivees."""
+        ArchiveWindow(self, category_id=self._cat_id,
+                      on_restore=lambda: self.refresh(self._cat_id))
+
     def _open_add_form(self):
         TaskForm(self, task=None, category_id=self._cat_id,
                  on_save=lambda: self.refresh(self._cat_id))
@@ -412,3 +485,126 @@ class TaskPanel(ctk.CTkFrame):
     def _open_edit_form(self, task: Task):
         TaskForm(self, task=task, category_id=task.category_id,
                  on_save=lambda: self.refresh(self._cat_id))
+
+
+class ArchiveWindow(ctk.CTkToplevel):
+    """Fenetre des taches archivees avec restauration possible."""
+
+    def __init__(self, master, category_id=None, on_restore=None):
+        super().__init__(master)
+        self._cat_id    = category_id
+        self._on_restore = on_restore
+        self.title("🗂 Archives")
+        self.geometry("700x500")
+        self.minsize(600, 400)
+        self.grab_set()
+        self._build()
+
+    def _build(self):
+        # Header
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=14, pady=(12, 6))
+
+        ctk.CTkLabel(header, text="🗂  Tâches archivées",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color="#888"
+        ).pack(side="left")
+
+        ctk.CTkButton(header, text="🗑 Tout supprimer",
+            height=28, width=130,
+            fg_color="#3a1a1a", hover_color="#5a2a2a",
+            font=ctk.CTkFont(size=11),
+            command=self._delete_all
+        ).pack(side="right")
+
+        # Liste
+        self._scroll = ctk.CTkScrollableFrame(self)
+        self._scroll.pack(fill="both", expand=True, padx=10, pady=4)
+
+        # Bouton fermer
+        ctk.CTkButton(self, text="Fermer", height=34,
+            fg_color="gray30", command=self.destroy
+        ).pack(padx=14, pady=(4, 12))
+
+        self._refresh()
+
+    def _refresh(self):
+        from core.database import get_archived_tasks, get_categories
+        for w in self._scroll.winfo_children():
+            w.destroy()
+
+        tasks = get_archived_tasks(category_id=self._cat_id)
+        cats  = {c.id: c for c in get_categories()}
+
+        if not tasks:
+            ctk.CTkLabel(self._scroll,
+                text="Aucune tâche archivée.",
+                text_color="gray", font=ctk.CTkFont(size=13)
+            ).pack(pady=30)
+            return
+
+        for t in tasks:
+            cat = cats.get(t.category_id)
+            row = ctk.CTkFrame(self._scroll,
+                fg_color=("gray85","gray20"), corner_radius=8)
+            row.pack(fill="x", padx=6, pady=3)
+
+            info = ctk.CTkFrame(row, fg_color="transparent")
+            info.pack(side="left", fill="x", expand=True, padx=10, pady=6)
+
+            ctk.CTkLabel(info, text=t.title,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color="#888", anchor="w"
+            ).pack(fill="x")
+
+            meta = f"{cat.name if cat else ''}"
+            if t.updated_at:
+                meta += f"  |  Archivée le {t.updated_at.strftime('%d/%m/%Y')}"
+            ctk.CTkLabel(info, text=meta,
+                font=ctk.CTkFont(size=10), text_color="#555", anchor="w"
+            ).pack(fill="x")
+
+            # Boutons
+            btns = ctk.CTkFrame(row, fg_color="transparent")
+            btns.pack(side="right", padx=8)
+
+            ctk.CTkButton(btns, text="↩ Restaurer",
+                height=26, width=90,
+                fg_color="#1a3a1a", hover_color="#2a5a2a",
+                font=ctk.CTkFont(size=10),
+                command=lambda tid=t.id: self._restore(tid)
+            ).pack(side="left", padx=3)
+
+            ctk.CTkButton(btns, text="✕",
+                height=26, width=30,
+                fg_color="#3a1a1a", hover_color="#5a2a2a",
+                font=ctk.CTkFont(size=10),
+                command=lambda tid=t.id: self._delete_one(tid)
+            ).pack(side="left", padx=3)
+
+    def _restore(self, task_id: int):
+        from core.database import unarchive_task
+        unarchive_task(task_id)
+        self._refresh()
+        if self._on_restore:
+            self._on_restore()
+
+    def _delete_one(self, task_id: int):
+        from core.database import delete_task
+        delete_task(task_id)
+        self._refresh()
+
+    def _delete_all(self):
+        import tkinter.messagebox as mb
+        tasks = get_archived_tasks(category_id=self._cat_id)
+        if not tasks:
+            return
+        if mb.askyesno("Confirmer",
+            f"Supprimer definitivement {len(tasks)} tache(s) archivee(s) ?",
+            icon="warning"):
+            from core.database import delete_task
+            for t in tasks:
+                delete_task(t.id)
+            self._refresh()
+            if self._on_restore:
+                self._on_restore()

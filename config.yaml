@@ -15,6 +15,7 @@ attachments:
 
 scheduler:
   check_interval_seconds: 30
+  auto_archive_done_days: 7  # archiver les terminees apres N jours (0=desactive)
 
 api:
   port: 8765

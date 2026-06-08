@@ -25,6 +25,7 @@ class Task(SQLModel, table=True):
     recurrence:       Optional[str]      = None
     recurrence_days:  Optional[str]      = None
     recurrence_end:   Optional[datetime] = None
+    archived:         bool               = Field(default=False)  # archivee
 
 
 class SubTask(SQLModel, table=True):

@@ -23,6 +23,7 @@ def _migrate_db():
         ("recurrence",      "TEXT"),
         ("recurrence_days", "TEXT"),
         ("recurrence_end",  "DATETIME"),
+        ("archived",        "INTEGER DEFAULT 0"),
     ]:
         if col not in existing_cols:
             cursor.execute(f"ALTER TABLE task ADD COLUMN {col} {col_type}")
@@ -61,11 +62,12 @@ def delete_category(cat_id):
         if cat: s.delete(cat); s.commit()
 
 
-def get_tasks(category_id=None, status=None):
+def get_tasks(category_id=None, status=None, include_archived=False):
     with Session(engine) as s:
         q = select(Task)
         if category_id is not None: q = q.where(Task.category_id == category_id)
         if status:                  q = q.where(Task.status == status)
+        if not include_archived:    q = q.where(Task.archived == False)
         return s.exec(q.order_by(Task.created_at.desc())).all()
 
 def add_task(title, description="", category_id=None, priority="normal",
@@ -96,6 +98,75 @@ def delete_task(task_id):
         t = s.get(Task, task_id)
         if t: s.delete(t)
         s.commit()
+
+
+# ── ARCHIVE ───────────────────────────────────────────────────────────────────
+def archive_task(task_id: int):
+    """Archive une tache (elle disparait de la vue principale)."""
+    with Session(engine) as s:
+        t = s.get(Task, task_id)
+        if t:
+            t.archived   = True
+            t.updated_at = datetime.now()
+            s.add(t); s.commit()
+
+def unarchive_task(task_id: int):
+    """Desarchive une tache."""
+    with Session(engine) as s:
+        t = s.get(Task, task_id)
+        if t:
+            t.archived   = False
+            t.updated_at = datetime.now()
+            s.add(t); s.commit()
+
+def archive_all_done(category_id: int = None):
+    """Archive toutes les taches terminees (optionnellement par categorie)."""
+    with Session(engine) as s:
+        q = select(Task).where(Task.status == "done").where(Task.archived == False)
+        if category_id:
+            q = q.where(Task.category_id == category_id)
+        tasks = s.exec(q).all()
+        count = 0
+        for t in tasks:
+            t.archived   = True
+            t.updated_at = datetime.now()
+            s.add(t)
+            count += 1
+        s.commit()
+        return count
+
+def delete_all_done(category_id: int = None):
+    """Supprime definitivement toutes les taches terminees."""
+    with Session(engine) as s:
+        q = select(Task).where(Task.status == "done")
+        if category_id:
+            q = q.where(Task.category_id == category_id)
+        tasks = s.exec(q).all()
+        count = 0
+        for t in tasks:
+            # Supprimer les sous-taches
+            subs = s.exec(select(SubTask).where(SubTask.task_id == t.id)).all()
+            for sub in subs: s.delete(sub)
+            s.delete(t)
+            count += 1
+        s.commit()
+        return count
+
+def get_archived_tasks(category_id: int = None):
+    """Retourne les taches archivees."""
+    with Session(engine) as s:
+        q = select(Task).where(Task.archived == True)
+        if category_id:
+            q = q.where(Task.category_id == category_id)
+        return s.exec(q.order_by(Task.updated_at.desc())).all()
+
+def get_done_count(category_id: int = None) -> int:
+    """Retourne le nombre de taches terminees non archivees."""
+    with Session(engine) as s:
+        q = select(Task).where(Task.status == "done").where(Task.archived == False)
+        if category_id:
+            q = q.where(Task.category_id == category_id)
+        return len(s.exec(q).all())
 
 def get_pending_reminders():
     now = datetime.now()
