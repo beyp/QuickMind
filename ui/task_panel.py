@@ -246,9 +246,19 @@ class TaskPanel(ctk.CTkFrame):
             self._done_count_label.configure(text="")
 
         if not tasks:
+            if category_id is not None:
+                msg = (
+                    "Aucune tâche dans cette catégorie.\n\n"
+                    "Note : des tâches créées sans catégorie\n"
+                    "apparaissent uniquement dans \"Toutes les tâches\"."
+                )
+            else:
+                msg = "Aucune tâche ici. Clique sur ＋ pour commencer !"
             ctk.CTkLabel(self._scroll,
-                text="Aucune tâche ici. Clique sur ＋ pour commencer !",
-                text_color="gray", font=ctk.CTkFont(size=13)
+                text=msg,
+                text_color="gray",
+                font=ctk.CTkFont(size=12),
+                justify="center"
             ).pack(pady=40)
             return
 

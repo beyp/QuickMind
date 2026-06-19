@@ -24,14 +24,25 @@ function Show-Help {
     Write-Host "  QuickMind - CLI PowerShell" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Usage :" -ForegroundColor Yellow
-    Write-Host '  .\qm.ps1 "Titre"                         Creer une tache'
-    Write-Host '  .\qm.ps1 "Titre" -p urgent -c Travail    Priorite + categorie'
-    Write-Host '  .\qm.ps1 "Titre" -r "25/05/2026 09:00"   Avec rappel'
-    Write-Host '  .\qm.ps1 list                             Lister les taches'
-    Write-Host '  .\qm.ps1 list -p urgent                   Lister les urgentes'
-    Write-Host '  .\qm.ps1 done 5                           Marquer tache #5 terminee'
-    Write-Host '  .\qm.ps1 ai "texte libre"                 Creer via IA (Mistral)'
-    Write-Host '  .\qm.ps1 health                           Verifier QuickMind'
+    Write-Host '  qm "Titre"                              Creer une tache'
+    Write-Host '  qm add "Titre"                          Alias - creer une tache'
+    Write-Host '  qm "Titre" -p urgent -c Travail         Priorite + categorie'
+    Write-Host '  qm "Titre" -r "25/05/2026 09:00"        Avec rappel'
+    Write-Host '  qm list                                  Lister les taches'
+    Write-Host '  qm list -p urgent                        Lister urgentes'
+    Write-Host '  qm list -c Travail                       Lister par categorie'
+    Write-Host '  qm done 5                                Marquer #5 terminee'
+    Write-Host '  qm delete 5                              Supprimer #5'
+    Write-Host '  qm ai "texte libre"                      Creer via IA'
+    Write-Host '  qm health                                Verifier QuickMind'
+    Write-Host ""
+    Write-Host "  Exemples :" -ForegroundColor Yellow
+    Write-Host '  qm "Appeler Jean" -p high -c Travail'
+    Write-Host '  qm add "Preparer demo" -p urgent -c Projets'
+    Write-Host '  qm ai "Reunion equipe lundi 10h salle B"'
+    Write-Host ""
+    Write-Host "  Priorites  : low | normal | high | urgent" -ForegroundColor DarkGray
+    Write-Host "  Categories : Travail | Perso | Projets | IA / Dev" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -158,10 +169,28 @@ if ($Command -eq "ai") {
     exit
 }
 
-# ── CREER TACHE (defaut) ──────────────────────────────────────────────────────
+# ── CREER TACHE ───────────────────────────────────────────────────────────────
+# Supporte : qm "titre"  OU  qm add "titre"  OU  qm new "titre"
+$taskTitle = $Command
+
+# Si la commande est un alias de creation
+if ($Command -eq "add" -or $Command -eq "new" -or $Command -eq "create") {
+    if ($Arg2 -eq "") {
+        Write-Host ""
+        Write-Host "  Usage : qm add `"Titre de la tache`" [-p priorite] [-c Categorie]" -ForegroundColor Yellow
+        Write-Host "  Ou    : qm `"Titre directement`"" -ForegroundColor Yellow
+        Write-Host ""
+        Show-Help
+        exit
+    }
+    $taskTitle = $Arg2
+}
+
+if ($taskTitle -eq "") { Show-Help; exit }
+
 try {
     $data = @{
-        title       = $Command
+        title       = $taskTitle
         description = $d
         category    = $c
         priority    = $p
@@ -170,7 +199,8 @@ try {
 
     $res = Invoke-QMPost -Endpoint "/task" -Data $data
     Write-Host "  OK Tache #$($res.id) creee : $($res.title)" -ForegroundColor Green
+    if ($c -ne "") { Write-Host "  Categorie : $c | Priorite : $p" -ForegroundColor Gray }
 } catch {
     Write-Host "  ERREUR $_" -ForegroundColor Red
-    Write-Host "  QuickMind tourne-t-il ? Lance : .\qm.ps1 health" -ForegroundColor Yellow
+    Write-Host "  QuickMind tourne-t-il ? Lance : qm health" -ForegroundColor Yellow
 }
