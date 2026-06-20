@@ -1,0 +1,16 @@
+# Intégration AION + QuickMind sur le même réseau Docker
+# Usage depuis le repo AION :
+#   docker network create aion-network
+#   docker-compose -f docker-compose.yml -f docker-compose.aion.yml up -d
+
+version: "3.9"
+
+services:
+  quickmind:
+    networks:
+      - aion-network
+
+networks:
+  aion-network:
+    external: true
+    name: aion-network
