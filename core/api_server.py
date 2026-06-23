@@ -89,33 +89,41 @@ def health():
 
 @app.get("/tasks")
 def list_tasks(
-    category: Optional[str] = None,
-    status:   Optional[str] = None,
-    priority: Optional[str] = None,
+    category:         Optional[str]  = None,
+    status:           Optional[str]  = None,
+    priority:         Optional[str]  = None,
+    category_id:      Optional[int]  = None,
+    include_archived: Optional[bool] = False,
 ):
-    from core.database import get_tasks, get_categories
-    cats       = {c.name.lower(): c.id for c in get_categories()}
-    cats_by_id = {c.id: c.name        for c in get_categories()}
-    cat_id     = cats.get(category.lower()) if category else None
-    tasks      = get_tasks(category_id=cat_id, status=status)
+    """Liste les taches avec filtres. Supporte category_id et include_archived."""
+    init_db()
+    cats_by_id = {c.id: c.name for c in get_categories()}
+    cat_id = category_id
+    if category and not cat_id:
+        cats_low = {c.name.lower(): c.id for c in get_categories()}
+        cat_id   = cats_low.get(category.lower())
+    tasks = get_tasks(category_id=cat_id, status=status,
+                      include_archived=include_archived)
     if priority:
         tasks = [t for t in tasks if t.priority == priority]
-    from core.database import get_subtask_progress
     result_list = []
     for t in tasks:
         done_c, total_c = get_subtask_progress(t.id)
         result_list.append({
-            "id":            t.id,
-            "title":         t.title,
-            "description":   t.description,
-            "category":      cats_by_id.get(t.category_id, ""),
-            "priority":      t.priority,
-            "status":        t.status,
-            "reminder":      t.reminder_at.isoformat() if t.reminder_at else None,
-            "created_at":    t.created_at.isoformat(),
-            "recurrence":    t.recurrence,
-            "subtask_done":  done_c,
-            "subtask_count": total_c,
+            "id":              t.id,
+            "title":           t.title,
+            "description":     t.description,
+            "category":        cats_by_id.get(t.category_id, ""),
+            "category_id":     t.category_id,
+            "priority":        t.priority,
+            "status":          t.status,
+            "reminder":        t.reminder_at.isoformat() if t.reminder_at else None,
+            "created_at":      t.created_at.isoformat(),
+            "recurrence":      t.recurrence or "",
+            "recurrence_days": t.recurrence_days,
+            "archived":        bool(t.archived) if hasattr(t,'archived') else False,
+            "subtask_done":    done_c,
+            "subtask_count":   total_c,
         })
     return result_list
 
