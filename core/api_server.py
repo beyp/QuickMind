@@ -96,6 +96,9 @@ def list_tasks(
     include_archived: Optional[bool] = False,
 ):
     """Liste les taches avec filtres. Supporte category_id et include_archived."""
+    # FastAPI peut recevoir "false" comme string depuis l URL
+    if isinstance(include_archived, str):
+        include_archived = include_archived.lower() not in ('false','0','no')
     init_db()
     cats_by_id = {c.id: c.name for c in get_categories()}
     cat_id = category_id
