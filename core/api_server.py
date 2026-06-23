@@ -201,6 +201,47 @@ class TaskUpdate(BaseModel):
     status:      Optional[str] = None
 
 
+@app.post("/tasks/archive-done")
+def archive_all_done_endpoint():
+    """Archive toutes les taches terminees."""
+    from core.database import archive_all_done
+    init_db()
+    count = archive_all_done()
+    _refresh_ui()
+    return {"archived": count}
+
+
+@app.delete("/tasks/delete-done")
+def delete_all_done_endpoint():
+    """Supprime toutes les taches terminees."""
+    from core.database import delete_all_done
+    init_db()
+    count = delete_all_done()
+    _refresh_ui()
+    return {"deleted": count}
+
+
+@app.get("/tasks/archived")
+def get_archived_tasks_endpoint():
+    """Retourne les taches archivees."""
+    from core.database import get_archived_tasks, get_categories
+    init_db()
+    cats  = {c.id: c.name for c in get_categories()}
+    tasks = get_archived_tasks()
+    return [
+        {
+            "id":       t.id,
+            "title":    t.title,
+            "category": cats.get(t.category_id, ""),
+            "priority": t.priority,
+            "status":   t.status,
+            "updated":  t.updated_at.isoformat() if t.updated_at else None,
+        }
+        for t in tasks
+    ]
+
+
+
 @app.get("/task/{task_id}")
 def get_task(task_id: int):
     """Retourne une tache avec ses sous-taches."""
@@ -340,44 +381,7 @@ def unarchive_task_endpoint(task_id: int):
     return {"id": task_id, "status": "unarchived"}
 
 
-@app.post("/tasks/archive-done")
-def archive_all_done_endpoint():
-    """Archive toutes les taches terminees."""
-    from core.database import archive_all_done
-    init_db()
-    count = archive_all_done()
-    _refresh_ui()
-    return {"archived": count}
 
-
-@app.delete("/tasks/delete-done")
-def delete_all_done_endpoint():
-    """Supprime toutes les taches terminees."""
-    from core.database import delete_all_done
-    init_db()
-    count = delete_all_done()
-    _refresh_ui()
-    return {"deleted": count}
-
-
-@app.get("/tasks/archived")
-def get_archived_tasks_endpoint():
-    """Retourne les taches archivees."""
-    from core.database import get_archived_tasks, get_categories
-    init_db()
-    cats  = {c.id: c.name for c in get_categories()}
-    tasks = get_archived_tasks()
-    return [
-        {
-            "id":       t.id,
-            "title":    t.title,
-            "category": cats.get(t.category_id, ""),
-            "priority": t.priority,
-            "status":   t.status,
-            "updated":  t.updated_at.isoformat() if t.updated_at else None,
-        }
-        for t in tasks
-    ]
 
 
 @app.put("/task/{task_id}/reminder")
