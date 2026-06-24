@@ -1062,7 +1062,7 @@ function toast(msg, type) {
 }
 
 function esc(s) {
-  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'<').replace(/>/g,'>');
 }
 
 function fmtDate(iso) {
