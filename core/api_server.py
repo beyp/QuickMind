@@ -1356,8 +1356,8 @@ function loadKanban() {
         card.className = 'task-card ' + (PRIO_CLASS[t.priority]||'pnor');
         card.style.marginBottom = '6px';
         card.style.borderLeftColor = s==='done' ? 'var(--green)' : (s==='in_progress' ? 'var(--orange)' : 'var(--blue)');
-        var prev = s !== 'todo' ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();moveTask('+t.id+','+(s==='done'?'\'in_progress\'':'\'todo\'')+')">&larr;</button>' : '';
-        var next = s !== 'done' ? '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();moveTask('+t.id+','+(s==='todo'?'\'in_progress\'':'\'done\'')+')">&rarr;</button>' : '';
+        var prev = s !== 'todo' ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();moveTask('+t.id+','+(s==='done'?'\'in_progress\'':'\'todo\'')+')">←</button>' : '';
+        var next = s !== 'done' ? '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();moveTask('+t.id+','+(s==='todo'?'\'in_progress\'':'\'done\'')+')">→</button>' : '';
         var prog = t.subtask_count > 0 ?
           '<div class="tc-progress" style="margin-top:4px"><div class="progress-track"><div class="progress-fill" style="width:'+Math.round(t.subtask_done/t.subtask_count*100)+'%;background:'+(t.subtask_done===t.subtask_count?'var(--green)':'var(--blue)')+'"></div></div><div class="progress-text">'+t.subtask_done+'/'+t.subtask_count+'</div></div>' : '';
         card.innerHTML = '<div class="tc-main">' +
