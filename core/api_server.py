@@ -712,7 +712,7 @@ function T(m,ok){
   setTimeout(function(){e.classList.remove('show');},3000);
 }
 
-function E(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function E(s){return(s||'').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>');}
 
 function init(){
   Promise.all([CHK(),LC()]).then(function(){
@@ -885,8 +885,8 @@ function LK(){
       ts.forEach(function(t){
         var c2=document.createElement('div');c2.className='tc';c2.style.borderLeftColor=PC[t.priority]||'#888';c2.style.marginBottom='6px';
         var pr=t.subtask_count>0?'<div class="pb" style="margin-top:4px"><div class="pf" style="width:'+Math.round(t.subtask_done/t.subtask_count*100)+'%;background:'+(t.subtask_done===t.subtask_count?'#32CD32':'#1E90FF')+'"></div></div>':'';
-        var prev=s!=='todo'?'<button class="btn bg2 bsm" onclick="MT('+t.id+','+(s==='done'?''in_progress'':''todo'')+');event.stopPropagation();">&lt;</button>':'';
-        var next=s!=='done'?'<button class="btn bp bsm" onclick="MT('+t.id+','+(s==='todo'?''in_progress'':''done'')+');event.stopPropagation();">&gt;</button>':'';
+        var prev=s!=='todo'?'<button class="btn bg2 bsm" onclick="MT('+t.id+','+(s==='done'?''in_progress'':''todo'')+');event.stopPropagation();"><</button>':'';
+        var next=s!=='done'?'<button class="btn bp bsm" onclick="MT('+t.id+','+(s==='todo'?''in_progress'':''done'')+');event.stopPropagation();">></button>':'';
         c2.innerHTML='<div style="font-weight:bold;font-size:.86em;margin-bottom:3px">'+E(t.title)+'</div><div style="font-size:.72em;color:#666">'+t.category+' '+DL(t)+'</div>'+pr+'<div style="display:flex;gap:3px;margin-top:5px">'+prev+next+'<button class="btn bg2 bsm" style="margin-left:auto" onclick="OE('+t.id+');event.stopPropagation()">Edit</button></div>';
         c2.onclick=function(){OE(t.id);};bd2.appendChild(c2);
       });
