@@ -569,3 +569,23 @@ QM.closeVision      = closeVision;
 QM.sendVision       = sendVision;
 QM.visionChooseFile = visionChooseFile;
 QM.clearVisionImage = clearVisionImage;
+
+
+// ── Statut moteur IA ─────────────────────────────────────────────────────────
+function checkAIStatus() {
+  apiFetch("/ai/status").then(function(d) {
+    var badge = g("ai-engine-badge");
+    if (!badge) return;
+    if (d.active !== "none") {
+      badge.textContent = "IA : " + d.active;
+      badge.style.color = d.groq ? "var(--green)" : "var(--orange)";
+      badge.title = d.groq
+        ? "Groq " + d.groq_model + " (rapide)"
+        : "Ollama/Mistral (local)";
+    } else {
+      badge.textContent = "IA : aucun moteur";
+      badge.style.color = "var(--red)";
+    }
+  }).catch(function() {});
+}
+QM.checkAIStatus = checkAIStatus;
