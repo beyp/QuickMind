@@ -74,10 +74,11 @@ function catColor(n) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 function init() {
+  loadSettings();
   Promise.all([loadHealth(), loadCats()]).then(function() {
     buildDayPicker('add'); buildDayPicker('edit');
     loadTasks();
-    setInterval(loadHealth, 30000);
+    // health interval gere par applySettings()
     setInterval(function(){if(curView==='list')loadTasks();}, 60000);
   });
 }
@@ -130,7 +131,7 @@ function selCat(id, item) {
   item.classList.add('active');
   var c = cats.find(function(x){return x.id===id;});
   g('view-title').textContent = c ? c.name : 'Toutes les taches';
-  loadTasks();
+  if (curView === 'kanban') loadKanban(); else loadTasks();
 }
 
 function switchView(v, item) {
@@ -573,6 +574,70 @@ function checkAIStatus() {
   }).catch(function() {});
 }
 QM.checkAIStatus = checkAIStatus;
+
+
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+var settings = {healthInterval:30, fontSize:14};
+var healthTimer = null;
+
+function loadSettings() {
+  try {
+    var s = localStorage.getItem('qm_settings');
+    if (s) { var p = JSON.parse(s); settings.healthInterval = p.healthInterval||30; settings.fontSize = p.fontSize||14; }
+  } catch(e) {}
+}
+
+function saveSettings2() {
+  try { localStorage.setItem('qm_settings', JSON.stringify(settings)); } catch(e) {}
+}
+
+function applySettings() {
+  document.body.style.fontSize = settings.fontSize + 'px';
+  var sb = g('sb-health-info');
+  if (sb) sb.textContent = 'Refresh: ' + settings.healthInterval + 's';
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = setInterval(loadHealth, settings.healthInterval * 1000);
+}
+
+function openSettings() {
+  var ov = g('settings-overlay');
+  if (!ov) return;
+  ov.classList.add('open');
+  var hi = g('sett-health'); var fi = g('sett-font');
+  if (hi) hi.value = settings.healthInterval;
+  if (fi) fi.value = settings.fontSize;
+  apiFetch('/ai/status').then(function(d) {
+    var el = g('sett-ai-status');
+    if (!el) return;
+    if (d.active !== 'none') {
+      el.textContent = 'Moteur IA : ' + d.active;
+      el.style.color = d.groq ? 'var(--green)' : 'var(--orange)';
+    } else {
+      el.textContent = 'Aucun moteur IA configure';
+      el.style.color = 'var(--red)';
+    }
+  }).catch(function() {});
+}
+
+function closeSettings() {
+  var ov = g('settings-overlay');
+  if (ov) ov.classList.remove('open');
+}
+
+function saveAndApply() {
+  var hi = g('sett-health'); var fi = g('sett-font');
+  if (hi) { var v = parseInt(hi.value); if (v >= 5 && v <= 300) settings.healthInterval = v; }
+  if (fi) { var v2 = parseInt(fi.value); if (v2 >= 10 && v2 <= 24) settings.fontSize = v2; }
+  saveSettings2();
+  applySettings();
+  toast('Reglages sauvegardes !', 'ok');
+  closeSettings();
+}
+
+QM.openSettings  = openSettings;
+QM.closeSettings = closeSettings;
+QM.saveAndApply  = saveAndApply;
 
 QM.selCat=selCat; QM.switchView=switchView; QM.setStatus=setStatus; QM.doSearch=doSearch;
 QM.openNew=openNew; QM.openAI=openAI; QM.closeAI=closeAI; QM.sendAI=sendAI;
