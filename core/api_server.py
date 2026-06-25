@@ -578,7 +578,9 @@ def ai_status():
 
 
 
+
 WEB_UI = """
+
 
 
 
@@ -685,6 +687,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <span class="tb-title" id="view-title">Toutes les taches</span><div class="tb-spacer"></div>
     <button class="btn btn-primary btn-sm" onclick="QM.openNew()">+ Nouvelle</button>
     <button class="btn btn-purple btn-sm" onclick="QM.openAI()">IA</button>
+    <button class="btn btn-purple btn-sm" onclick="QM.openVision()" title="Vision IA Groq">&#128247; Vision IA</button>
     <button class="btn btn-warning btn-sm" onclick="QM.archDone()">Archiver fini</button>
     <button class="btn btn-danger btn-sm" onclick="QM.delDone()">Suppr fini</button>
     <button class="btn btn-ghost btn-sm" onclick="QM.openArchives()">Archives</button>
