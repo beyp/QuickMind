@@ -10,9 +10,23 @@ from datetime import datetime
 from pathlib import Path
 import requests
 
+# Charger .env au demarrage
+try:
+    from pathlib import Path as _P
+    _env = _P(__file__).parent.parent / ".env"
+    if _env.exists():
+        with open(_env, "r", encoding="utf-8-sig") as _f:
+            for _l in _f:
+                _l = _l.strip()
+                if "=" in _l and not _l.startswith("#"):
+                    _k, _v = _l.split("=", 1)
+                    os.environ.setdefault(_k.strip(), _v.strip().strip('"\' '))
+except Exception:
+    pass
+
 GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL  = "llama-3.3-70b-versatile"
-GROQ_VISION = "meta-llama/llama-4-scout-17b-16e-instruct"
+GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
+GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 
 def _load_token():
