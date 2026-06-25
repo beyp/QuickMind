@@ -391,22 +391,6 @@ document.addEventListener('keydown',function(e){
 });
 
 // ── Export ───────────────────────────────────────────────────────────────────
-QM.selCat=selCat; QM.switchView=switchView; QM.setStatus=setStatus; QM.doSearch=doSearch;
-QM.openNew=openNew; QM.openAI=openAI; QM.closeAI=closeAI; QM.sendAI=sendAI;
-QM.archDone=archDone; QM.delDone=delDone; QM.openArchives=openArchives; QM.closeArchives=closeArchives;
-QM.openEdit=openEdit; QM.closeEdit=closeEdit; QM.saveEdit=saveEdit; QM.overlayClose=overlayClose;
-QM.deleteTask=deleteTask; QM.archiveTask=archiveTask;
-QM.restoreTask=restoreTask; QM.deleteArchived=deleteArchived;
-QM.setPrio=setPrio; QM.setStatus2=setStatus2; QM.toggleDays=toggleDays; QM.clearReminder=clearReminder;
-QM.toggleAcc=toggleAcc; QM.buildDayPicker=buildDayPicker;
-QM.toggleSub=toggleSub; QM.deleteSub=deleteSub; QM.addSub=addSub;
-QM.genSubsAI=genSubsAI; QM.addAISubs=addAISubs; QM.moveTask=moveTask; QM.createTask=createTask;
-
-// Auto-init
-init();
-
-})();
-
 
 // ── Groq Vision UI ────────────────────────────────────────────────────────────
 var pastedImageB64  = null;
@@ -589,3 +573,19 @@ function checkAIStatus() {
   }).catch(function() {});
 }
 QM.checkAIStatus = checkAIStatus;
+
+QM.selCat=selCat; QM.switchView=switchView; QM.setStatus=setStatus; QM.doSearch=doSearch;
+QM.openNew=openNew; QM.openAI=openAI; QM.closeAI=closeAI; QM.sendAI=sendAI;
+QM.archDone=archDone; QM.delDone=delDone; QM.openArchives=openArchives; QM.closeArchives=closeArchives;
+QM.openEdit=openEdit; QM.closeEdit=closeEdit; QM.saveEdit=saveEdit; QM.overlayClose=overlayClose;
+QM.deleteTask=deleteTask; QM.archiveTask=archiveTask;
+QM.restoreTask=restoreTask; QM.deleteArchived=deleteArchived;
+QM.setPrio=setPrio; QM.setStatus2=setStatus2; QM.toggleDays=toggleDays; QM.clearReminder=clearReminder;
+QM.toggleAcc=toggleAcc; QM.buildDayPicker=buildDayPicker;
+QM.toggleSub=toggleSub; QM.deleteSub=deleteSub; QM.addSub=addSub;
+QM.genSubsAI=genSubsAI; QM.addAISubs=addAISubs; QM.moveTask=moveTask; QM.createTask=createTask;
+
+// Auto-init
+init();
+
+})();
