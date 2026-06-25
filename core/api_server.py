@@ -545,7 +545,39 @@ def create_tasks_vision(data: VisionRequest):
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+@app.get("/ai/status")
+def ai_status():
+    """Retourne le statut des moteurs IA disponibles."""
+    status = {"groq": False, "groq_model": "", "ollama": False, "active": "none"}
+    # Verifier Groq
+    try:
+        from agents.local_ai import _get_groq_key, _groq_available, GROQ_MODEL
+        has_key = bool(_get_groq_key())
+        avail   = _groq_available() if has_key else False
+        status["groq"]       = avail
+        status["groq_key"]   = has_key
+        status["groq_model"] = GROQ_MODEL
+    except Exception as e:
+        status["groq_error"] = str(e)
+    # Verifier Ollama
+    try:
+        import requests as _r
+        resp = _r.get("http://localhost:11434/api/tags", timeout=3)
+        status["ollama"] = resp.status_code == 200
+    except Exception:
+        status["ollama"] = False
+    # Determiner le moteur actif
+    if status["groq"]:
+        status["active"] = f"groq/{status['groq_model']}"
+    elif status["ollama"]:
+        status["active"] = "ollama/mistral"
+    return status
+
+
 WEB_UI = """
+
 
 <!DOCTYPE html>
 <html lang="fr">
