@@ -463,7 +463,90 @@ def serve_app_js():
 
 
 
+
+
+class VisionRequest(BaseModel):
+    prompt:           str
+    image_b64:        Optional[str] = None
+    image_mime:       Optional[str] = "image/png"
+    default_category: Optional[str] = ""
+    default_reminder: Optional[str] = None
+
+
+@app.get("/groq/status")
+def groq_status():
+    try:
+        from agents.groq_vision import is_available, _load_token
+        has_key = bool(_load_token())
+        avail   = is_available()
+        return {
+            "available": avail,
+            "has_key":   has_key,
+            "status":    "ok" if avail else ("no_key" if not has_key else "unreachable")
+        }
+    except Exception as e:
+        return {"available": False, "has_key": False, "status": str(e)}
+
+
+@app.post("/tasks/vision")
+def create_tasks_vision(data: VisionRequest):
+    try:
+        from agents.groq_vision import analyze_and_generate_tasks
+        from core.database import add_task, add_subtask, get_categories, init_db
+        from datetime import datetime as dt
+        init_db()
+        cats  = get_categories()
+        cmap  = {c.name.lower(): c.id for c in cats}
+        res   = analyze_and_generate_tasks(
+            prompt           = data.prompt,
+            image_b64        = data.image_b64,
+            image_mime       = data.image_mime or "image/png",
+            categories       = [c.name for c in cats],
+            default_category = data.default_category or "",
+            default_reminder = data.default_reminder,
+        )
+        created = []
+        for t in res.get("tasks", []):
+            cname = t.get("category", data.default_category or "")
+            cid   = cmap.get(cname.lower()) if cname else None
+            rdt   = None
+            if t.get("reminder"):
+                try:
+                    rdt = dt.fromisoformat(t["reminder"])
+                except Exception:
+                    pass
+            task = add_task(
+                title       = t.get("title", "Tache"),
+                description = t.get("description", ""),
+                category_id = cid,
+                priority    = t.get("priority", "normal"),
+                reminder_at = rdt,
+            )
+            subs = []
+            for s in t.get("subtasks", [])[:8]:
+                if s.strip():
+                    sub = add_subtask(task.id, s.strip())
+                    if sub: subs.append({"id": sub.id, "title": sub.title})
+            created.append({
+                "id":       task.id,
+                "title":    task.title,
+                "category": cname,
+                "priority": task.priority,
+                "reminder": task.reminder_at.isoformat() if task.reminder_at else None,
+                "subtasks": subs,
+            })
+        _refresh_ui()
+        return {
+            "analysis":      res.get("analysis", ""),
+            "tasks_created": len(created),
+            "tasks":         created,
+        }
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 WEB_UI = """
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -569,6 +652,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <button class="btn btn-warning btn-sm" onclick="QM.archDone()">Archiver fini</button>
     <button class="btn btn-danger btn-sm" onclick="QM.delDone()">Suppr fini</button>
     <button class="btn btn-ghost btn-sm" onclick="QM.openArchives()">Archives</button>
+    <button class="btn btn-purple btn-sm" onclick="QM.openVision()" title="Analyser image avec Groq Vision IA">&#128247; Vision IA</button>
   </div>
   <div class="tabs">
     <div class="tab active" onclick="QM.switchView('list',this)">Liste</div>
@@ -634,6 +718,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <div class="modal-footer"><button class="btn btn-ghost" onclick="QM.closeAI()">Fermer</button><button class="btn btn-purple" onclick="QM.sendAI()">Envoyer a Mistral</button></div>
 </div>
 </div>
+
+<!-- Modal Vision IA Groq -->
+<div class="overlay" id="vision-overlay" onclick="QM.overlayClose('vision-overlay',event)">
+<div class="modal" onclick="event.stopPropagation()" style="max-width:660px">
+  <div class="modal-hdr">
+    <span class="modal-title">&#128247; Vision IA Groq &#8212; Analyse et creation de taches</span>
+    <button class="modal-close" onclick="QM.closeVision()">X</button>
+  </div>
+  <div class="modal-body" style="max-height:75vh">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px;background:var(--bg3);border-radius:6px">
+      <span style="font-size:.8em;color:var(--text3)">Statut Groq :</span>
+      <span id="groq-status-badge" style="font-size:.8em;color:var(--text3)">Verification...</span>
+    </div>
+    <div style="margin-bottom:12px">
+      <label class="form-label" style="margin-bottom:6px">Image (Ctrl+V pour coller ou cliquer)</label>
+      <div onclick="QM.visionChooseFile()" style="border:2px dashed var(--border2);border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:border .15s" onmouseenter="this.style.borderColor='var(--blue)'" onmouseleave="this.style.borderColor='var(--border2)'">
+        <div id="vision-img-preview"></div>
+        <div id="vision-img-status" style="font-size:.82em;color:var(--text3);margin-top:4px">Coller image Ctrl+V ou cliquer pour choisir</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="QM.clearVisionImage()">Effacer image</button>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label class="form-label">Instruction *</label>
+      <textarea class="form-input" id="vision-prompt" rows="4" placeholder="Ex: Cree les taches pour ce projet avec rappels la semaine prochaine, categorie Travail&#10;&#10;Ou sans image : Prepare un plan pour organiser notre conference en juin avec les etapes cles"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group">
+        <label class="form-label">Categorie par defaut</label>
+        <select class="form-input" id="vision-cat"><option value="">Auto (IA choisit)</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rappel par defaut</label>
+        <input type="datetime-local" class="form-input" id="vision-reminder">
+      </div>
+    </div>
+    <div id="vision-result" style="display:none;margin-top:10px;border:1px solid var(--border2);border-radius:8px;padding:12px;background:var(--bg3)"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-ghost" onclick="QM.closeVision()">Fermer</button>
+    <button class="btn btn-purple" id="vision-send-btn" onclick="QM.sendVision()">&#128247; Analyser et creer les taches</button>
+  </div>
+</div></div>
 <div class="toast" id="toast-msg"></div>
 <script src="/app.js"></script>
 </body>
@@ -685,6 +811,49 @@ def start_api_server(port: int = 8765, ui_callback=None, tk_app=None):
         ip = socket.gethostbyname(socket.gethostname())
     except Exception:
         ip = "localhost"
+    print(f"[API] Serveur demarre :")
+    print(f"[API]   Local  : http://localhost:{port}")
+    print(f"[API]   Reseau : http://{ip}:{port}")
+    print(f"[API]   Docs   : http://localhost:{port}/docs")
+"""
+
+
+@app.get("/", response_class=HTMLResponse)
+def web_ui():
+    return WEB_UI
+
+
+@app.get("/app.js")
+def serve_app_js():
+    from fastapi.responses import Response
+    from pathlib import Path
+    p = Path(__file__).parent / "app.js"
+    if p.exists():
+        with open(p, "r", encoding="utf-8") as f: js = f.read()
+        return Response(content=js, media_type="application/javascript",
+            headers={"Cache-Control":"no-cache, no-store, must-revalidate"})
+    return Response(content="// not found", media_type="application/javascript")
+
+
+_server_thread = None
+_server = None
+
+
+def start_api_server(port: int = 8765, ui_callback=None, tk_app=None):
+    global _server_thread, _server
+    if ui_callback: set_ui_callback(ui_callback)
+    if tk_app: set_tk_app(tk_app)
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning", access_log=False)
+    _server = uvicorn.Server(config)
+    def _run():
+        import asyncio
+        loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
+        loop.run_until_complete(_server.serve())
+    _server_thread = threading.Thread(target=_run, daemon=True, name="QuickMind-API")
+    _server_thread.start()
+    import socket
+    try: ip = socket.gethostbyname(socket.gethostname())
+    except Exception: ip = "localhost"
     print(f"[API] Serveur demarre :")
     print(f"[API]   Local  : http://localhost:{port}")
     print(f"[API]   Reseau : http://{ip}:{port}")
