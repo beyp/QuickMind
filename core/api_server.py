@@ -847,7 +847,6 @@ def start_api_server(port: int = 8765, ui_callback=None, tk_app=None):
     print(f"[API]   Local  : http://localhost:{port}")
     print(f"[API]   Reseau : http://{ip}:{port}")
     print(f"[API]   Docs   : http://localhost:{port}/docs")
-"""
 
 
 @app.get("/", response_class=HTMLResponse)
