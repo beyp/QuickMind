@@ -576,7 +576,9 @@ def ai_status():
     return status
 
 
+
 WEB_UI = """
+
 
 
 <!DOCTYPE html>
@@ -684,7 +686,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <button class="btn btn-warning btn-sm" onclick="QM.archDone()">Archiver fini</button>
     <button class="btn btn-danger btn-sm" onclick="QM.delDone()">Suppr fini</button>
     <button class="btn btn-ghost btn-sm" onclick="QM.openArchives()">Archives</button>
-    <button class="btn btn-purple btn-sm" onclick="QM.openVision()" title="Analyser image avec Groq Vision IA">&#128247; Vision IA</button>
+    <button class="btn btn-ghost btn-sm" onclick="QM.openVision()" title="Vision IA Groq">&#128247;</button>
+    <span id="sb-health-info" style="font-size:.72em;color:var(--text3);white-space:nowrap">Refresh: 30s</span>
+    <button class="btn btn-ghost btn-sm" onclick="QM.openSettings()" title="Reglages">&#9881;&#65039;</button>
   </div>
   <div class="tabs">
     <div class="tab active" onclick="QM.switchView('list',this)">Liste</div>
@@ -792,6 +796,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
     <button class="btn btn-purple" id="vision-send-btn" onclick="QM.sendVision()">&#128247; Analyser et creer les taches</button>
   </div>
 </div></div>
+
+<!-- Modal Settings -->
+<div class="overlay" id="settings-overlay" onclick="QM.overlayClose('settings-overlay',event)">
+<div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+  <div class="modal-hdr">
+    <span class="modal-title">&#9881;&#65039; Reglages QuickMind Web</span>
+    <button class="modal-close" onclick="QM.closeSettings()">X</button>
+  </div>
+  <div class="modal-body">
+    <div style="margin-bottom:16px;padding:10px;background:var(--bg3);border-radius:8px">
+      <div style="font-size:.8em;font-weight:600;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Moteur IA</div>
+      <div id="sett-ai-status" style="font-size:.85em;color:var(--text3)">Verification...</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Frequence health check (secondes)</label>
+        <input type="number" class="form-input" id="sett-health" min="5" max="300" value="30">
+        <div style="font-size:.72em;color:var(--text3);margin-top:3px">Min 5s, Max 300s (5 min)</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Taille de la police (px)</label>
+        <input type="number" class="form-input" id="sett-font" min="10" max="24" value="14">
+        <div style="font-size:.72em;color:var(--text3);margin-top:3px">Min 10px, Max 24px</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:10px;background:var(--bg3);border-radius:8px">
+      <div style="font-size:.8em;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Legende priorites</div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:.82em">
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:2px;background:var(--red);flex-shrink:0"></div><span>Bordure rouge = Priorite URGENTE</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:2px;background:var(--orange);flex-shrink:0"></div><span>Bordure orange = Priorite HAUTE</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:2px;background:var(--blue);flex-shrink:0"></div><span>Bordure bleue = Priorite NORMALE</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:2px;background:var(--text3);flex-shrink:0"></div><span>Bordure grise = Priorite BASSE</span></div>
+        <div style="display:flex;align-items:center;gap:8px"><div style="width:12px;height:12px;border-radius:2px;background:var(--green);flex-shrink:0"></div><span>Bordure verte = Tache TERMINEE</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-ghost" onclick="QM.closeSettings()">Annuler</button>
+    <button class="btn btn-primary" onclick="QM.saveAndApply()">&#10003; Appliquer et sauvegarder</button>
+  </div>
+</div>
+</div>
 <div class="toast" id="toast-msg"></div>
 <script src="/app.js"></script>
 </body>
