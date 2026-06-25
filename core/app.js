@@ -406,3 +406,166 @@ QM.genSubsAI=genSubsAI; QM.addAISubs=addAISubs; QM.moveTask=moveTask; QM.createT
 init();
 
 })();
+
+
+// ── Groq Vision UI ────────────────────────────────────────────────────────────
+var pastedImageB64  = null;
+var pastedImageMime = "image/png";
+
+function checkGroqStatus() {
+  apiFetch("/groq/status").then(function(d) {
+    var b = g("groq-status-badge");
+    if (!b) return;
+    if (d.available) {
+      b.textContent = "Groq connecte";
+      b.style.color = "var(--green)";
+    } else if (!d.has_key) {
+      b.textContent = "GROQ_API_KEY manquante dans .env";
+      b.style.color = "var(--red)";
+    } else {
+      b.textContent = "Groq inaccessible";
+      b.style.color = "var(--orange)";
+    }
+  }).catch(function() {
+    var b = g("groq-status-badge");
+    if (b) { b.textContent = "Erreur"; b.style.color = "var(--red)"; }
+  });
+}
+
+function openVision() {
+  g("vision-overlay").classList.add("open");
+  checkGroqStatus();
+  pastedImageB64  = null;
+  pastedImageMime = "image/png";
+  g("vision-img-preview").innerHTML = "";
+  g("vision-img-status").textContent = "Coller image Ctrl+V ou cliquer pour choisir";
+  g("vision-img-status").style.color  = "var(--text3)";
+  g("vision-result").style.display    = "none";
+  var vcat = g("vision-cat");
+  if (vcat) {
+    var opts = '<option value="">Auto (IA choisit)</option>' +
+      cats.map(function(c) { return '<option value="' + c.name + '">' + c.name + '</option>'; }).join("");
+    vcat.innerHTML = opts;
+  }
+}
+
+function closeVision() {
+  g("vision-overlay").classList.remove("open");
+}
+
+document.addEventListener("paste", function(e) {
+  if (!g("vision-overlay").classList.contains("open")) return;
+  var items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf("image") !== -1) {
+      var blob   = items[i].getAsFile();
+      var mime   = items[i].type || "image/png";
+      var reader = new FileReader();
+      reader.onload = (function(m) {
+        return function(ev) {
+          var dataUrl     = ev.target.result;
+          pastedImageB64  = dataUrl.split(",")[1];
+          pastedImageMime = m;
+          g("vision-img-preview").innerHTML =
+            '<img src="' + dataUrl + '" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border2)">';
+          g("vision-img-status").textContent = "Image prete";
+          g("vision-img-status").style.color  = "var(--green)";
+        };
+      })(mime);
+      reader.readAsDataURL(blob);
+      e.preventDefault();
+      return;
+    }
+  }
+});
+
+function visionChooseFile() {
+  var inp = document.createElement("input");
+  inp.type   = "file";
+  inp.accept = "image/*";
+  inp.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var dataUrl     = ev.target.result;
+      pastedImageB64  = dataUrl.split(",")[1];
+      pastedImageMime = file.type || "image/png";
+      g("vision-img-preview").innerHTML =
+        '<img src="' + dataUrl + '" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border2)">';
+      g("vision-img-status").textContent = "Image : " + file.name;
+      g("vision-img-status").style.color  = "var(--green)";
+    };
+    reader.readAsDataURL(file);
+  };
+  inp.click();
+}
+
+function clearVisionImage() {
+  pastedImageB64  = null;
+  pastedImageMime = "image/png";
+  g("vision-img-preview").innerHTML  = "";
+  g("vision-img-status").textContent = "Coller image Ctrl+V ou cliquer pour choisir";
+  g("vision-img-status").style.color  = "var(--text3)";
+}
+
+function sendVision() {
+  var prompt = g("vision-prompt").value.trim();
+  var defCat = g("vision-cat")     ? g("vision-cat").value     : "";
+  var defRem = g("vision-reminder") ? g("vision-reminder").value : "";
+  var resEl  = g("vision-result");
+  var btn    = g("vision-send-btn");
+  if (!prompt) { toast("Decrivez ce que vous voulez faire", "err"); return; }
+  btn.textContent = "Analyse en cours...";
+  btn.disabled    = true;
+  resEl.style.display = "none";
+  apiFetch("/tasks/vision", {
+    m: "POST",
+    b: {
+      prompt:           prompt,
+      image_b64:        pastedImageB64 || null,
+      image_mime:       pastedImageMime,
+      default_category: defCat,
+      default_reminder: defRem ? defRem + ":00" : null
+    }
+  }).then(function(d) {
+    btn.textContent = "Analyser et creer les taches";
+    btn.disabled    = false;
+    var html = '<div style="font-size:.85em;color:var(--text2);margin-bottom:10px;padding:8px;background:var(--bg4);border-radius:6px"><strong>Analyse :</strong> ' + esc(d.analysis) + '</div>';
+    if (d.tasks && d.tasks.length > 0) {
+      html += '<div style="font-weight:600;font-size:.88em;color:var(--green);margin-bottom:8px">' + d.tasks_created + ' tache(s) creee(s) !</div>';
+      d.tasks.forEach(function(t) {
+        html += '<div style="padding:8px 10px;background:var(--bg4);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--blue)">';
+        html += '<div style="font-weight:600;font-size:.88em">' + esc(t.title) + '</div>';
+        html += '<div style="font-size:.75em;color:var(--text3);margin-top:2px">' +
+          (t.category ? t.category + " | " : "") + t.priority +
+          (t.reminder ? " | " + new Date(t.reminder).toLocaleString("fr-FR", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "") +
+          '</div>';
+        if (t.subtasks && t.subtasks.length > 0) {
+          html += '<div style="margin-top:5px">';
+          t.subtasks.forEach(function(s) {
+            html += '<div style="font-size:.78em;color:var(--text3)">&#9658; ' + esc(s.title) + '</div>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+    } else {
+      html += '<div style="color:var(--orange);font-size:.85em">Aucune tache generee. Reformulez votre demande.</div>';
+    }
+    resEl.innerHTML     = html;
+    resEl.style.display = "block";
+    loadTasks();
+  }).catch(function(e) {
+    btn.textContent = "Analyser et creer les taches";
+    btn.disabled    = false;
+    toast("Erreur Groq : " + e.message, "err");
+  });
+}
+
+QM.openVision       = openVision;
+QM.closeVision      = closeVision;
+QM.sendVision       = sendVision;
+QM.visionChooseFile = visionChooseFile;
+QM.clearVisionImage = clearVisionImage;
