@@ -350,8 +350,8 @@ function openNew(){switchView('add');document.querySelectorAll('.tab').forEach(f
 // ── Delete/Archive ───────────────────────────────────────────────────────────
 function deleteTask(){if(!curTaskId||!confirm('Supprimer ?'))return;apiFetch('/task/'+curTaskId,{m:'DELETE'}).then(function(){toast('Supprimee','ok');closeEdit();}).catch(function(e){toast(e.message,'err');});}
 function archiveTask(){if(!curTaskId)return;apiFetch('/task/'+curTaskId+'/archive',{m:'POST'}).then(function(){toast('Archivee','ok');closeEdit();}).catch(function(e){toast(e.message,'err');});}
-function archDone(){if(!confirm('Archiver les terminees ?'))return;apiFetch('/tasks/archive-done',{m:'POST'}).then(function(d){toast(d.archived+' archivee(s)','ok');loadTasks();}).catch(function(e){toast(e.message,'err');});}
-function delDone(){if(!confirm('Supprimer les terminees ?'))return;apiFetch('/tasks/delete-done',{m:'DELETE'}).then(function(d){toast(d.deleted+' supprimee(s)','ok');loadTasks();}).catch(function(e){toast(e.message,'err');});}
+function archDone(){if(!confirm('Archiver les terminees ?'))return;apiFetch('/tasks/archive-done',{m:'POST'}).then(function(d){toast(d.archived+' archivee(s)','ok');loadTasks();if(curView==='kanban')loadKanban();}).catch(function(e){toast(e.message,'err');});}
+function delDone(){if(!confirm('Supprimer les terminees ?'))return;apiFetch('/tasks/delete-done',{m:'DELETE'}).then(function(d){toast(d.deleted+' supprimee(s)','ok');loadTasks();if(curView==='kanban')loadKanban();}).catch(function(e){toast(e.message,'err');});}
 
 // ── Archives ──────────────────────────────────────────────────────────────────
 function openArchives(){
