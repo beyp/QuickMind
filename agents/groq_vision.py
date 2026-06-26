@@ -1,7 +1,8 @@
 """
 QuickMind Agent Vision Groq
 Analyse images + texte pour generer des taches et sous-taches.
-Inspire d AION-Core brain.py avec llama-4-scout vision.
+Inspire d AION-Core brain.py - utilise llama-4-scout pour vision
+et llama-3.3-70b pour texte.
 """
 import json
 import os
@@ -10,27 +11,30 @@ from datetime import datetime
 from pathlib import Path
 import requests
 
-# Charger .env au demarrage
-try:
-    from pathlib import Path as _P
-    _env = _P(__file__).parent.parent / ".env"
-    if _env.exists():
-        with open(_env, "r", encoding="utf-8-sig") as _f:
-            for _l in _f:
-                _l = _l.strip()
-                if "=" in _l and not _l.startswith("#"):
-                    _k, _v = _l.split("=", 1)
-                    os.environ.setdefault(_k.strip(), _v.strip().strip('"\' '))
-except Exception:
-    pass
-
 GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
 GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
 
+# Charger .env au demarrage pour rendre les vars disponibles
+try:
+    _env_path = Path(__file__).parent.parent / ".env"
+    if _env_path.exists():
+        with open(_env_path, "r", encoding="utf-8-sig") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _k, _v = _line.split("=", 1)
+                    _k = _k.strip()
+                    _v = _v.strip().strip('"').strip("'")
+                    os.environ.setdefault(_k, _v)
+    GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
+    GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
+except Exception:
+    pass
+
 
 def _load_token():
-    """Charge la cle Groq depuis .env > variable OS."""
+    """Charge la cle Groq depuis .env puis variable OS."""
     env_path = Path(__file__).parent.parent / ".env"
     if env_path.exists():
         try:
@@ -38,33 +42,39 @@ def _load_token():
                 for line in f:
                     line = line.strip()
                     if line.startswith("GROQ_API_KEY=") and not line.startswith("#"):
-                        t = line.split("=", 1)[1].strip().strip("'" ")
-                        if t and not t.startswith("gsk_xxx"):
-                            return t
+                        val = line.split("=", 1)[1].strip()
+                        val = val.strip('"').strip("'")
+                        if val and not val.startswith("gsk_xxx"):
+                            return val
         except Exception:
             pass
     return os.environ.get("GROQ_API_KEY", "")
 
 
-def _hdrs(k):
-    return {"Authorization": f"Bearer {k}", "Content-Type": "application/json"}
+def _hdrs(key):
+    return {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
 
 
 def is_available():
     """Verifie si Groq est configure et accessible."""
-    k = _load_token()
-    if not k:
+    key = _load_token()
+    if not key:
         return False
     try:
         r = requests.get(
             "https://api.groq.com/openai/v1/models",
-            headers=_hdrs(k), timeout=5)
+            headers=_hdrs(key),
+            timeout=5,
+        )
         return r.status_code == 200
     except Exception:
         return False
 
 
-SYSTEM = """Tu es un assistant de gestion de taches integre dans QuickMind.
+SYSTEM_PROMPT = """Tu es un assistant de gestion de taches integre dans QuickMind.
 Tu analyses textes et images pour generer des taches actionnables.
 Reponds UNIQUEMENT en JSON valide sans texte avant ou apres.
 
@@ -100,45 +110,63 @@ def analyze_and_generate_tasks(
     default_reminder=None,
 ):
     """
-    Analyse prompt + image optionnelle via Groq Vision.
+    Analyse prompt + image optionnelle via Groq.
+    Texte seul : llama-3.3-70b-versatile
+    Avec image  : llama-4-scout-17b-16e-instruct (vision)
     Retourne dict avec analysis + tasks.
     """
-    k = _load_token()
-    if not k:
-        raise RuntimeError("GROQ_API_KEY non configure dans .env")
+    key = _load_token()
+    if not key:
+        raise RuntimeError(
+            "GROQ_API_KEY non configure. "
+            "Ajoutez GROQ_API_KEY=gsk_xxx dans votre fichier .env"
+        )
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     no_reminder = "aucun"
+    cats_str    = ", ".join(categories) if categories else ""
+
     user_text = (
-        f"Date actuelle : {now}\n"
-        f"Categories disponibles : {', '.join(categories or [])}\n"
-        f"Categorie par defaut : {default_category or 'aucune'}\n"
-        f"Rappel par defaut : {default_reminder or no_reminder}\n\n"
+        f"Date actuelle : {now}
+"
+        f"Categories disponibles : {cats_str}
+"
+        f"Categorie par defaut : {default_category or 'aucune'}
+"
+        f"Rappel par defaut : {default_reminder or no_reminder}
+
+"
         f"Demande : {prompt}"
     )
 
     if image_b64:
         user_content = [
-            {"type": "text", "text": user_text},
-            {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{image_b64}"}}
+            {"type": "text",      "text": user_text},
+            {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{image_b64}"}},
         ]
         model = GROQ_VISION
     else:
         user_content = user_text
         model = GROQ_MODEL
 
-    msgs = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user",   "content": user_content}
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user_content},
     ]
 
     r = requests.post(
         GROQ_URL,
-        headers=_hdrs(k),
-        json={"model": model, "messages": msgs, "temperature": 0.2, "max_tokens": 2048},
+        headers=_hdrs(key),
+        json={
+            "model":       model,
+            "messages":    messages,
+            "temperature": 0.2,
+            "max_tokens":  2048,
+        },
         timeout=30,
     )
     r.raise_for_status()
+
     raw = r.json()["choices"][0]["message"]["content"].strip()
     m = re.search(r"\{.*\}", raw, re.DOTALL)
     if m:
@@ -146,4 +174,5 @@ def analyze_and_generate_tasks(
             return json.loads(m.group())
         except Exception:
             pass
+
     return {"analysis": raw[:200], "tasks": []}
