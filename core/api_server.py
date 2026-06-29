@@ -581,7 +581,9 @@ def ai_status():
 
 
 
+
 WEB_UI = """
+
 
 
 
@@ -757,7 +759,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 <div class="overlay" id="ai-overlay" onclick="QM.overlayClose('ai-overlay',event)">
 <div class="modal" onclick="event.stopPropagation()">
   <div class="modal-hdr"><span class="modal-title">&#129504; Assistant IA Groq / Mistral</span><button class="modal-close" onclick="QM.closeAI()">X</button></div>
-  <div class="modal-body"><div class="form-group"><label class="form-label">Commande naturelle</label><textarea class="form-input" id="ai-prompt" rows="4" placeholder="Ex: Cree une tache urgente pour la demo vendredi 14h..."></textarea></div><div id="ai-result" style="display:none;margin-top:10px;padding:10px;background:var(--purple2);border-radius:var(--radius2);font-size:.85em;color:var(--purple)"></div></div>
+  <div class="modal-body"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:7px 10px;background:var(--bg3);border-radius:6px"><span style="font-size:.78em;color:var(--text3)">Moteur :</span><span id="ai-engine-label" style="font-size:.78em;color:var(--green)">Groq llama-3.3-70b (texte) + llama-4-scout (vision)</span></div><div style="margin-bottom:10px"><label class="form-label" style="margin-bottom:5px">Image optionnelle (Ctrl+V ou cliquer)</label><div onclick="QM.visionChooseFile()" style="border:2px dashed var(--border2);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:border .15s" onmouseenter="this.style.borderColor='var(--blue)'" onmouseleave="this.style.borderColor='var(--border2)'"><div id="vision-img-preview"></div><div id="vision-img-status" style="font-size:.78em;color:var(--text3);margin-top:2px">Coller image Ctrl+V ou cliquer — sans image : analyse texte seul</div></div><button class="btn btn-ghost btn-sm" style="margin-top:5px" onclick="QM.clearVisionImage()">Effacer image</button></div><div class="form-group" style="margin-bottom:8px"><label class="form-label">Instruction *</label><textarea class="form-input" id="ai-prompt" rows="4" placeholder="Ex: Cree une tache urgente pour la demo vendredi 14h avec rappel jeudi 18h&#10;&#10;Ou avec image : analyse ce document et cree les taches associees en categorie Travail"></textarea></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div class="form-group"><label class="form-label">Categorie par defaut</label><select class="form-input" id="vision-cat"><option value="">Auto (IA choisit)</option></select></div><div class="form-group"><label class="form-label">Rappel par defaut</label><input type="datetime-local" class="form-input" id="vision-reminder"></div></div><div id="ai-result" style="display:none;margin-top:8px;padding:10px;background:var(--bg3);border-radius:var(--radius2);font-size:.85em;color:var(--text)"></div></div>
   <div class="modal-footer"><button class="btn btn-ghost" onclick="QM.closeAI()">Fermer</button><button class="btn btn-purple" onclick="QM.sendAI()">&#129504; Analyser et creer</button></div>
 </div>
 </div>
