@@ -198,6 +198,10 @@ def _next_recurrence_date(task):
         next_dt = base + timedelta(weeks=1)
         while next_dt <= now: next_dt += timedelta(weeks=1)
 
+    elif task.recurrence == "biweekly":
+        next_dt = base + timedelta(weeks=2)
+        while next_dt <= now: next_dt += timedelta(weeks=2)
+
     elif task.recurrence == "monthly":
         import calendar
         next_dt = base
