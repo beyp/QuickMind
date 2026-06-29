@@ -5,7 +5,7 @@ import requests
 
 GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
 
 
 def _load_env():
@@ -25,7 +25,7 @@ def _load_env():
 
 _load_env()
 GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
 
 
 def _load_token():
