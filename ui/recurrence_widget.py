@@ -4,7 +4,8 @@ import json
 RECURRENCE_OPTIONS = {
     "none":    "Aucune",
     "daily":   "Quotidienne",
-    "weekly":  "Hebdomadaire",
+    "weekly":    "Hebdomadaire",
+    "biweekly":  "Bi-hebdomadaire (2 sem.)",
     "monthly": "Mensuelle",
     "yearly":  "Annuelle",
     "custom":  "Jours specifiques",
@@ -12,7 +13,8 @@ RECURRENCE_OPTIONS = {
 RECURRENCE_ICONS = {
     "none":    "",
     "daily":   "🔁 Quotidien",
-    "weekly":  "🔁 Hebdo",
+    "weekly":    "🔁 Hebdo",
+    "biweekly":  "🔁 Bi-hebdo",
     "monthly": "🔁 Mensuel",
     "yearly":  "🔁 Annuel",
     "custom":  "🔁 Perso",
