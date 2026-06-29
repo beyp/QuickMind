@@ -580,7 +580,9 @@ def ai_status():
 
 
 
+
 WEB_UI = """
+
 
 
 
@@ -688,9 +690,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
   <div class="topbar">
     <span class="tb-title" id="view-title">Toutes les taches</span><div class="tb-spacer"></div>
     <button class="btn btn-primary btn-sm" onclick="QM.openNew()">+ Nouvelle</button>
-    <button class="btn btn-purple btn-sm" onclick="QM.openAI()">IA</button>
-    <button class="btn btn-purple btn-sm" onclick="QM.openVision()" title="Vision IA Groq">&#128247; Vision IA</button>
-    <button class="btn btn-warning btn-sm" onclick="QM.archDone()">Archiver fini</button>
+    <button class="btn btn-purple btn-sm" onclick="QM.openAI()">&#129504; IA</button>
+        <button class="btn btn-warning btn-sm" onclick="QM.archDone()">Archiver fini</button>
     <button class="btn btn-danger btn-sm" onclick="QM.delDone()">Suppr fini</button>
     <button class="btn btn-ghost btn-sm" onclick="QM.openArchives()">Archives</button>
         <span id="sb-health-info" style="font-size:.72em;color:var(--text3);white-space:nowrap">Refresh: 30s</span>
@@ -755,53 +756,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 <!-- Modal IA -->
 <div class="overlay" id="ai-overlay" onclick="QM.overlayClose('ai-overlay',event)">
 <div class="modal" onclick="event.stopPropagation()">
-  <div class="modal-hdr"><span class="modal-title">Assistant IA Mistral</span><button class="modal-close" onclick="QM.closeAI()">X</button></div>
+  <div class="modal-hdr"><span class="modal-title">&#129504; Assistant IA Groq / Mistral</span><button class="modal-close" onclick="QM.closeAI()">X</button></div>
   <div class="modal-body"><div class="form-group"><label class="form-label">Commande naturelle</label><textarea class="form-input" id="ai-prompt" rows="4" placeholder="Ex: Cree une tache urgente pour la demo vendredi 14h..."></textarea></div><div id="ai-result" style="display:none;margin-top:10px;padding:10px;background:var(--purple2);border-radius:var(--radius2);font-size:.85em;color:var(--purple)"></div></div>
-  <div class="modal-footer"><button class="btn btn-ghost" onclick="QM.closeAI()">Fermer</button><button class="btn btn-purple" onclick="QM.sendAI()">Envoyer a Mistral</button></div>
+  <div class="modal-footer"><button class="btn btn-ghost" onclick="QM.closeAI()">Fermer</button><button class="btn btn-purple" onclick="QM.sendAI()">&#129504; Analyser et creer</button></div>
 </div>
 </div>
 
-<!-- Modal Vision IA Groq -->
-<div class="overlay" id="vision-overlay" onclick="QM.overlayClose('vision-overlay',event)">
-<div class="modal" onclick="event.stopPropagation()" style="max-width:660px">
-  <div class="modal-hdr">
-    <span class="modal-title">&#128247; Vision IA Groq &#8212; Analyse et creation de taches</span>
-    <button class="modal-close" onclick="QM.closeVision()">X</button>
-  </div>
-  <div class="modal-body" style="max-height:75vh">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px;background:var(--bg3);border-radius:6px">
-      <span style="font-size:.8em;color:var(--text3)">Statut Groq :</span>
-      <span id="groq-status-badge" style="font-size:.8em;color:var(--text3)">Verification...</span>
-    </div>
-    <div style="margin-bottom:12px">
-      <label class="form-label" style="margin-bottom:6px">Image (Ctrl+V pour coller ou cliquer)</label>
-      <div onclick="QM.visionChooseFile()" style="border:2px dashed var(--border2);border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:border .15s" onmouseenter="this.style.borderColor='var(--blue)'" onmouseleave="this.style.borderColor='var(--border2)'">
-        <div id="vision-img-preview"></div>
-        <div id="vision-img-status" style="font-size:.82em;color:var(--text3);margin-top:4px">Coller image Ctrl+V ou cliquer pour choisir</div>
-      </div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="QM.clearVisionImage()">Effacer image</button>
-    </div>
-    <div class="form-group" style="margin-bottom:10px">
-      <label class="form-label">Instruction *</label>
-      <textarea class="form-input" id="vision-prompt" rows="4" placeholder="Ex: Cree les taches pour ce projet avec rappels la semaine prochaine, categorie Travail&#10;&#10;Ou sans image : Prepare un plan pour organiser notre conference en juin avec les etapes cles"></textarea>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="form-group">
-        <label class="form-label">Categorie par defaut</label>
-        <select class="form-input" id="vision-cat"><option value="">Auto (IA choisit)</option></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Rappel par defaut</label>
-        <input type="datetime-local" class="form-input" id="vision-reminder">
-      </div>
-    </div>
-    <div id="vision-result" style="display:none;margin-top:10px;border:1px solid var(--border2);border-radius:8px;padding:12px;background:var(--bg3)"></div>
-  </div>
-  <div class="modal-footer">
-    <button class="btn btn-ghost" onclick="QM.closeVision()">Fermer</button>
-    <button class="btn btn-purple" id="vision-send-btn" onclick="QM.sendVision()">&#128247; Analyser et creer les taches</button>
-  </div>
-</div></div>
 
 <!-- Modal Settings -->
 <div class="overlay" id="settings-overlay" onclick="QM.overlayClose('settings-overlay',event)">
