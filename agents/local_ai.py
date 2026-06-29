@@ -15,7 +15,7 @@ from core.database import (get_tasks, get_categories, add_task,
 
 GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
 
 # Charger .env au demarrage
 try:
@@ -30,7 +30,7 @@ try:
                     os.environ.setdefault(_k.strip(), _v.strip().strip('"\' '))
     # Relire apres chargement
     GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-    GROQ_VISION = os.getenv("GROQ_VISION", "meta-llama/llama-4-scout-17b-16e-instruct")
+    GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
 except Exception:
     pass
 
@@ -70,13 +70,16 @@ def _call_groq(messages, model=None):
     k = _get_groq_key()
     if not k:
         raise RuntimeError("GROQ_API_KEY non configure")
+    used_model = model or GROQ_MODEL
     r = requests.post(
         GROQ_URL,
-        headers={"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
-        json={"model": model or GROQ_MODEL, "messages": messages,
+        headers={"Authorization": "Bearer " + k, "Content-Type": "application/json"},
+        json={"model": used_model, "messages": messages,
               "temperature": 0.1, "max_tokens": 2048},
         timeout=30,
     )
+    if r.status_code == 404:
+        raise RuntimeError("Modele Groq introuvable: " + used_model + ". Verifiez GROQ_MODEL dans .env")
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
