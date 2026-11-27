@@ -35,7 +35,7 @@ def generate_subtasks(task_title: str, task_description: str = "",
         ],
         temperature=0.2,
     ).strip()
-    match = re.search(r"\\{.*\\}", raw, re.DOTALL)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
         data = json.loads(match.group())
         subs = data.get("subtasks", [])
