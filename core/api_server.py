@@ -163,8 +163,12 @@ def create_task_ai(data: TaskAI):
     try:
         from agents.local_ai import ask_ai
         result = ask_ai(data.text)
+        if isinstance(result, str) and result.startswith("Erreur IA :"):
+            raise HTTPException(status_code=503, detail=result)
         _refresh_ui()
         return {"result": result, "status": "created"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
