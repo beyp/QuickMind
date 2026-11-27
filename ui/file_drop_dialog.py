@@ -123,7 +123,7 @@ class FileDropDialog(ctk.CTkToplevel):
 
         # Statut
         self._status_label = ctk.CTkLabel(self,
-            text="⏳ Analyse Mistral en cours...",
+            text="⏳ Analyse Groq en cours...",
             text_color="#FFD700",
             font=ctk.CTkFont(size=11))
         self._status_label.pack(padx=20, pady=(4,2))
