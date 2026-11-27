@@ -207,7 +207,7 @@ class OutlookPanel(ctk.CTkToplevel):
             "  - Envoie un mail a prenom@domaine.com pour...\n"
             "  - Montre mes taches Outlook\n\n"
             "Boutons IA :\n"
-            "  Resume mail #N  : Mistral resume le mail numero N\n"
+            "  Resume mail #N  : Groq resume le mail numero N\n"
             "  Corps complet #N: affiche le corps entier du mail N\n\n"
             "Apres avoir liste des mails, des boutons [Convertir]\n"
             "apparaissent pour creer une tache QuickMind avec\n"
@@ -269,7 +269,7 @@ class OutlookPanel(ctk.CTkToplevel):
     def _run_summarize(self, entry_id: str, subject: str, mode: str):
         label = "Résumé IA" if mode == "auto" else "Corps complet"
         self._append("Vous", f"{label} du mail : {subject}")
-        self._status.configure(text="● Mistral...", text_color="#FFD700")
+        self._status.configure(text="● Groq...", text_color="#FFD700")
         self._send_btn.configure(state="disabled")
 
         def _run():

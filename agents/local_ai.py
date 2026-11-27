@@ -1,123 +1,37 @@
 """
 Agent IA QuickMind.
-Utilise Groq (llama-3.3-70b) si disponible, sinon Ollama/Mistral en fallback.
+Utilise uniquement Groq via l'adaptateur IA commun.
 Meme logique qu AION-Core brain.py.
 """
 import json
-import os
 import re
-import requests
 from datetime import datetime
 from typing import Optional
 from core.database import (get_tasks, get_categories, add_task,
                            update_task, delete_task, init_db,
                            add_subtask, get_subtasks)
 
-GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
+from agents.ai_client import call_ai, get_api_key, is_available, model_name
 
-# Charger .env au demarrage
-try:
-    from pathlib import Path as _P
-    _env = _P(__file__).parent.parent / ".env"
-    if _env.exists():
-        with open(_env, "r", encoding="utf-8-sig") as _f:
-            for _l in _f:
-                _l = _l.strip()
-                if "=" in _l and not _l.startswith("#"):
-                    _k, _v = _l.split("=", 1)
-                    os.environ.setdefault(_k.strip(), _v.strip().strip('"\' '))
-    # Relire apres chargement
-    GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-    GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
-except Exception:
-    pass
+GROQ_MODEL = model_name()
+GROQ_VISION = model_name(vision=True)
 
 
 def _get_groq_key():
-    """Retourne la cle Groq depuis env."""
-    from pathlib import Path
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        try:
-            with open(env_path, "r", encoding="utf-8-sig") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("GROQ_API_KEY=") and not line.startswith("#"):
-                        t = line.split("=", 1)[1].strip().strip('"\' ')
-                        if t and not t.startswith("gsk_xxx"):
-                            return t
-        except Exception:
-            pass
-    return os.environ.get("GROQ_API_KEY", "")
+    return get_api_key()
 
 
 def _groq_available():
-    k = _get_groq_key()
-    if not k:
-        return False
-    try:
-        r = requests.get("https://api.groq.com/openai/v1/models",
-            headers={"Authorization": f"Bearer {k}"}, timeout=5)
-        return r.status_code == 200
-    except Exception:
-        return False
+    return is_available()
 
 
 def _call_groq(messages, model=None):
-    """Appel Groq API — retourne le contenu du message."""
-    k = _get_groq_key()
-    if not k:
-        raise RuntimeError("GROQ_API_KEY non configure")
-    used_model = model or GROQ_MODEL
-    r = requests.post(
-        GROQ_URL,
-        headers={"Authorization": "Bearer " + k, "Content-Type": "application/json"},
-        json={"model": used_model, "messages": messages,
-              "temperature": 0.1, "max_tokens": 2048},
-        timeout=30,
-    )
-    if r.status_code == 404:
-        raise RuntimeError("Modele Groq introuvable: " + used_model + ". Verifiez GROQ_MODEL dans .env")
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
-
-
-def _call_ollama(messages):
-    """Appel Ollama/Mistral — fallback si pas de Groq."""
-    import ollama
-    response = ollama.chat(
-        model="mistral",
-        messages=messages,
-        options={"temperature": 0.1},
-    )
-    return response["message"]["content"]
+    # Kept for compatibility with callers of this private helper.
+    return call_ai(messages)
 
 
 def _call_ai(messages):
-    """
-    Appel IA avec priorite :
-    1. Groq (llama-3.3-70b) si cle disponible
-    2. Ollama/Mistral sinon
-    """
-    if _get_groq_key():
-        try:
-            result = _call_groq(messages)
-            print("[AI] Groq llama-3.3-70b")
-            return result
-        except Exception as e:
-            print(f"[AI] Groq failed ({e}), fallback Ollama")
-    # Fallback Ollama
-    try:
-        result = _call_ollama(messages)
-        print("[AI] Ollama/Mistral (fallback)")
-        return result
-    except Exception as e:
-        err = str(e)
-        if "connection" in err.lower() or "refused" in err.lower():
-            raise RuntimeError("Ni Groq ni Ollama disponibles. Configure GROQ_API_KEY dans .env ou lance Ollama.")
-        raise
+    return call_ai(messages)
 
 
 SYSTEM_PROMPT = """Tu es un assistant de gestion de taches integre dans QuickMind.
@@ -320,7 +234,7 @@ def _execute_action(parsed):
 def ask_ai(prompt):
     """
     Point d entree principal.
-    Groq (llama-3.3-70b) en priorite, Ollama/Mistral en fallback.
+    Groq via l'adaptateur IA commun.
     """
     context      = _get_context()
     user_message = f"Contexte :\n{context}\n\nDemande : {prompt}"

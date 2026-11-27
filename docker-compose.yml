@@ -13,6 +13,9 @@ services:
     environment:
       - QUICKMIND_HOST=0.0.0.0
       - QUICKMIND_PORT=8765
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - GROQ_VISION=${GROQ_VISION:-meta-llama/llama-4-scout-17b-16e-instruct}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",

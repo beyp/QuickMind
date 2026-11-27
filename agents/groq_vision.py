@@ -1,62 +1,12 @@
 import json, os, re
 from datetime import datetime
 from pathlib import Path
-import requests
 
-GROQ_URL    = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
-
-
-def _load_env():
-    env_path = Path(__file__).parent.parent / ".env"
-    if not env_path.exists(): return
-    try:
-        with open(env_path, "r", encoding="utf-8-sig") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    v = v.strip().strip('"').strip("'").strip()
-                    os.environ.setdefault(k.strip(), v)
-    except Exception:
-        pass
-
-
-_load_env()
-GROQ_MODEL  = os.getenv("GROQ_MODEL",  "llama-3.3-70b-versatile")
-GROQ_VISION = os.getenv("GROQ_VISION", "llama-4-scout-17b-16e-instruct")
+from agents.ai_client import call_ai, get_api_key, is_available
 
 
 def _load_token():
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        try:
-            with open(env_path, "r", encoding="utf-8-sig") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("GROQ_API_KEY=") and not line.startswith("#"):
-                        val = line.split("=", 1)[1].strip().strip('"').strip("'").strip()
-                        if val and not val.startswith("gsk_xxx"):
-                            return val
-        except Exception:
-            pass
-    return os.environ.get("GROQ_API_KEY", "")
-
-
-def _hdrs(key):
-    return {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
-
-
-def is_available():
-    key = _load_token()
-    if not key: return False
-    try:
-        r = requests.get("https://api.groq.com/openai/v1/models",
-                         headers=_hdrs(key), timeout=5)
-        return r.status_code == 200
-    except Exception:
-        return False
+    return get_api_key()
 
 
 SYSTEM_PROMPT = (
@@ -94,11 +44,6 @@ def analyze_and_generate_tasks(
     default_category="",
     default_reminder=None,
 ):
-    key = _load_token()
-    if not key:
-        raise RuntimeError(
-            "GROQ_API_KEY non configure. Ajoutez GROQ_API_KEY=gsk_xxx dans .env"
-        )
     now      = datetime.now().strftime("%Y-%m-%d %H:%M")
     cats_str = ", ".join(categories) if categories else ""
     user_text = (
@@ -114,22 +59,15 @@ def analyze_and_generate_tasks(
             {"type": "image_url", "image_url":
                 {"url": "data:" + image_mime + ";base64," + image_b64}},
         ]
-        model = GROQ_VISION
+        vision = True
     else:
         user_content = user_text
-        model = GROQ_MODEL
+        vision = False
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": user_content},
     ]
-    r = requests.post(
-        GROQ_URL, headers=_hdrs(key),
-        json={"model": model, "messages": messages,
-              "temperature": 0.2, "max_tokens": 2048},
-        timeout=30,
-    )
-    r.raise_for_status()
-    raw = r.json()["choices"][0]["message"]["content"].strip()
+    raw = call_ai(messages, vision=vision, temperature=0.2).strip()
     m   = re.search(r"\{.*\}", raw, re.DOTALL)
     if m:
         try: return json.loads(m.group())

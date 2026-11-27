@@ -11,7 +11,7 @@ from agents.outlook_agent import (
     get_outlook_tasks, create_outlook_task,
     get_mail_info
 )
-import ollama
+from agents.ai_client import call_ai
 
 
 OUTLOOK_SYSTEM = (
@@ -57,8 +57,8 @@ def _parse(raw: str) -> dict:
 
 def summarize_mail(entry_id: str, mode: str = "auto") -> str:
     """
-    Résume ou retourne le corps complet d'un mail via Mistral.
-    mode : "summary" | "full" | "auto" (Mistral choisit)
+    Résume ou retourne le corps complet d'un mail via Groq.
+    mode : "summary" | "full" | "auto" (Groq choisit)
     """
     try:
         info = get_mail_info(entry_id)
@@ -82,7 +82,7 @@ def summarize_mail(entry_id: str, mode: str = "auto") -> str:
             f"{body}"
         )
 
-    # Mode summary ou auto : on demande a Mistral
+    # Mode summary ou auto : on demande a Groq
     word_count = len(body.split())
     if mode == "auto":
         instruction = (
@@ -108,16 +108,13 @@ def summarize_mail(entry_id: str, mode: str = "auto") -> str:
     )
 
     try:
-        response = ollama.chat(
-            model="mistral",
-            messages=[
-                {"role": "system",
-                 "content": "Tu es un assistant qui analyse et resume des emails professionnels en francais."},
+        summary = call_ai(
+            [
+                {"role": "system", "content": "Tu es un assistant qui analyse et resume des emails professionnels en francais."},
                 {"role": "user", "content": prompt},
             ],
-            options={"temperature": 0.2},
-        )
-        summary = response["message"]["content"].strip()
+            temperature=0.2,
+        ).strip()
         header = (
             f"De    : {sender}\n"
             f"Objet : {subject}\n"
@@ -126,26 +123,21 @@ def summarize_mail(entry_id: str, mode: str = "auto") -> str:
         )
         return header + summary
     except Exception as e:
-        err = str(e)
-        if "connection" in err.lower() or "refused" in err.lower():
-            return "Ollama n est pas demarre. Lance : ollama serve"
-        return f"Erreur Mistral : {e}"
+        return f"Erreur Groq : {e}"
 
 
 def ask_outlook(prompt: str) -> tuple[str, list | None]:
     """Point d entree principal pour les commandes Outlook."""
     try:
-        response = ollama.chat(
-            model="mistral",
-            messages=[
+        parsed = _parse(call_ai(
+            [
                 {"role": "system", "content": OUTLOOK_SYSTEM},
-                {"role": "user",   "content": prompt},
+                {"role": "user", "content": prompt},
             ],
-            options={"temperature": 0.1},
-        )
-        parsed = _parse(response["message"]["content"])
+            temperature=0.1,
+        ))
     except Exception as e:
-        return f"Erreur Mistral : {e}", None
+        return f"Erreur Groq : {e}", None
 
     action = parsed.get("action", "unknown")
     params = parsed.get("params", {})

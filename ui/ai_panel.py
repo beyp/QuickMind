@@ -7,7 +7,7 @@ from agents.local_ai import ask_ai
 
 
 WELCOME = (
-    "Bonjour ! Je suis votre assistant Mistral local.\n"
+    "Bonjour ! Je suis votre assistant Groq.\n"
     "\n"
     "Exemples de commandes :\n"
     "  - Cree une tache urgente : appel client vendredi 14h\n"
@@ -32,14 +32,14 @@ class AIPanel(ctk.CTkFrame):
 
         ctk.CTkLabel(
             header,
-            text="  Assistant IA — Mistral (local)",
+            text="  Assistant IA — Groq (cloud)",
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color="#1E90FF"
         ).pack(side="left")
 
         self._status_label = ctk.CTkLabel(
             header,
-            text="● offline / local",
+            text="● Groq / cloud",
             font=ctk.CTkFont(size=10),
             text_color="#32CD32"
         )
@@ -115,7 +115,7 @@ class AIPanel(ctk.CTkFrame):
 
         self._append("user", prompt)
         self._entry.delete(0, "end")
-        self._send_btn.configure(state="disabled", text="⏳ Mistral...")
+        self._send_btn.configure(state="disabled", text="⏳ Groq...")
         self._status_label.configure(text="● traitement...", text_color="#FFD700")
 
         def _run():
@@ -127,7 +127,7 @@ class AIPanel(ctk.CTkFrame):
     def _on_response(self, result: str):
         self._append("IA", result)
         self._send_btn.configure(state="normal", text="Envoyer")
-        self._status_label.configure(text="● offline / local", text_color="#32CD32")
+        self._status_label.configure(text="● Groq / cloud", text_color="#32CD32")
         if self.on_action_done:
             self.on_action_done()
 

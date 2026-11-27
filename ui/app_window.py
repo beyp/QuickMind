@@ -33,7 +33,7 @@ class App(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.title("QuickMind  v" + _cfg["app"]["version"] +
-                   "  —  IA locale Mistral + Outlook")
+                   "  —  IA Groq + Outlook")
         self.geometry("1200x800")
         self.minsize(900, 600)
 
