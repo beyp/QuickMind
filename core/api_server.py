@@ -425,7 +425,7 @@ def update_recurrence(task_id: int, data: RecurrenceUpdate):
 
 @app.post("/task/{task_id}/subtasks/ai")
 def generate_subtasks_ai(task_id: int, data: SubtaskAIRequest):
-    """Genere des sous-taches via Mistral."""
+    """Genere des sous-taches via Groq."""
     try:
         from agents.subtask_ai import generate_subtasks
         from core.database import get_subtask_progress
@@ -550,29 +550,16 @@ def create_tasks_vision(data: VisionRequest):
 @app.get("/ai/status")
 def ai_status():
     """Retourne le statut des moteurs IA disponibles."""
-    status = {"groq": False, "groq_model": "", "ollama": False, "active": "none"}
-    # Verifier Groq
-    try:
-        from agents.local_ai import _get_groq_key, _groq_available, GROQ_MODEL
-        has_key = bool(_get_groq_key())
-        avail   = _groq_available() if has_key else False
-        status["groq"]       = avail
-        status["groq_key"]   = has_key
-        status["groq_model"] = GROQ_MODEL
-    except Exception as e:
-        status["groq_error"] = str(e)
-    # Verifier Ollama
-    try:
-        import requests as _r
-        resp = _r.get("http://localhost:11434/api/tags", timeout=3)
-        status["ollama"] = resp.status_code == 200
-    except Exception:
-        status["ollama"] = False
-    # Determiner le moteur actif
-    if status["groq"]:
-        status["active"] = f"groq/{status['groq_model']}"
-    elif status["ollama"]:
-        status["active"] = "ollama/mistral"
+    from agents.ai_client import get_api_key, is_available, model_name
+    has_key = bool(get_api_key())
+    available = is_available() if has_key else False
+    status = {
+        "groq": available,
+        "groq_key": has_key,
+        "groq_model": model_name(),
+        "ollama": False,
+        "active": f"groq/{model_name()}" if available else "none",
+    }
     return status
 
 
@@ -758,7 +745,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 <!-- Modal IA -->
 <div class="overlay" id="ai-overlay" onclick="QM.overlayClose('ai-overlay',event)">
 <div class="modal" onclick="event.stopPropagation()">
-  <div class="modal-hdr"><span class="modal-title">&#129504; Assistant IA Groq / Mistral</span><button class="modal-close" onclick="QM.closeAI()">X</button></div>
+  <div class="modal-hdr"><span class="modal-title">&#129504; Assistant IA Groq</span><button class="modal-close" onclick="QM.closeAI()">X</button></div>
   <div class="modal-body"><div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:7px 10px;background:var(--bg3);border-radius:6px"><span style="font-size:.78em;color:var(--text3)">Moteur :</span><span id="ai-engine-label" style="font-size:.78em;color:var(--green)">Groq llama-3.3-70b (texte) + llama-4-scout (vision)</span></div><div style="margin-bottom:10px"><label class="form-label" style="margin-bottom:5px">Image optionnelle (Ctrl+V ou cliquer)</label><div onclick="QM.visionChooseFile()" style="border:2px dashed var(--border2);border-radius:8px;padding:10px;text-align:center;cursor:pointer;transition:border .15s" onmouseenter="this.style.borderColor='var(--blue)'" onmouseleave="this.style.borderColor='var(--border2)'"><div id="vision-img-preview"></div><div id="vision-img-status" style="font-size:.78em;color:var(--text3);margin-top:2px">Coller image Ctrl+V ou cliquer — sans image : analyse texte seul</div></div><button class="btn btn-ghost btn-sm" style="margin-top:5px" onclick="QM.clearVisionImage()">Effacer image</button></div><div class="form-group" style="margin-bottom:8px"><label class="form-label">Instruction *</label><textarea class="form-input" id="ai-prompt" rows="4" placeholder="Ex: Cree une tache urgente pour la demo vendredi 14h avec rappel jeudi 18h&#10;&#10;Ou avec image : analyse ce document et cree les taches associees en categorie Travail"></textarea></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div class="form-group"><label class="form-label">Categorie par defaut</label><select class="form-input" id="vision-cat"><option value="">Auto (IA choisit)</option></select></div><div class="form-group"><label class="form-label">Rappel par defaut</label><input type="datetime-local" class="form-input" id="vision-reminder"></div></div><div id="ai-result" style="display:none;margin-top:8px;padding:10px;background:var(--bg3);border-radius:var(--radius2);font-size:.85em;color:var(--text)"></div></div>
   <div class="modal-footer"><button class="btn btn-ghost" onclick="QM.closeAI()">Fermer</button><button class="btn btn-purple" onclick="QM.sendAI()">&#129504; Analyser et creer</button></div>
 </div>
