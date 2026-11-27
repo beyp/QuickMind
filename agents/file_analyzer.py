@@ -1,5 +1,5 @@
 """
-Analyseur de fichiers via IA locale (Mistral/Ollama).
+Analyseur de fichiers via Groq.
 Supporte : PDF, Word, Excel, TXT, Markdown, Images, EML, MSG
 """
 import os
@@ -85,7 +85,7 @@ def _extract_msg(path: str) -> str:
 def _extract_image(path: str) -> str:
     """
     Pour les images, on encode en base64 et on utilise
-    Mistral vision si disponible, sinon message informatif.
+    Groq vision si disponible, sinon message informatif.
     """
     import base64
     with open(path, "rb") as f:
@@ -127,7 +127,7 @@ def extract_text(path: str) -> tuple[str, str]:
         return f"[Erreur extraction : {e}]", file_type
 
 
-# ── Analyse IA via Mistral ────────────────────────────────────────────────────
+# ── Analyse IA via Groq ────────────────────────────────────────────────────
 
 ANALYSIS_PROMPT = """Tu es un assistant de gestion de taches.
 Analyse ce document et reponds UNIQUEMENT en JSON valide.
@@ -152,73 +152,43 @@ Regles :
 
 def analyze_with_ai(path: str, categories: list[str] = None) -> dict:
     """
-    Analyse un fichier avec Mistral et retourne un dict de suggestions.
+    Analyse un fichier avec Groq et retourne un dict de suggestions.
     """
     import json
-    import ollama
+    from agents.ai_client import call_ai
 
     text, file_type = extract_text(path)
     fname = Path(path).name
 
-    # Limiter le texte envoye a Mistral
+    # Limiter le texte envoye a Groq
     text_truncated = text[:4000] if len(text) > 4000 else text
 
     is_image = text.startswith("[IMAGE_B64:")
 
     if is_image:
-        # Extraire le base64 complet pour vision
         import base64
+        import mimetypes
         with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        mime = mimetypes.guess_type(path)[0] or "image/jpeg"
         user_content = [
-            {"type": "image_url",
-             "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-            {"type": "text",
-             "text": ANALYSIS_PROMPT + f"\n\nFichier : {fname} (Image)"}
+            {"type": "text", "text": ANALYSIS_PROMPT + f"\\n\\nFichier : {fname} (Image)"},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
         ]
-        try:
-            response = ollama.chat(
-                model="llava",   # modele vision
-                messages=[{"role": "user", "content": user_content}],
-                options={"temperature": 0.1}
-            )
-        except Exception:
-            # Fallback si llava pas disponible
-            return {
-                "title": f"Analyser image : {fname}",
-                "description": f"Image recue : {fname}. Analyse manuelle requise.",
-                "priority": "normal",
-                "category": categories[0] if categories else "Travail",
-                "actions": [f"Examiner l image {fname}"],
-                "summary": f"Image : {fname}",
-                "file_type": "Image",
-                "file_name": fname,
-            }
+        raw = call_ai([{"role": "user", "content": user_content}],
+                      vision=True, temperature=0.1).strip()
     else:
         cat_hint = f"Categories disponibles : {', '.join(categories)}" if categories else ""
-        prompt   = (
+        prompt = (
             ANALYSIS_PROMPT +
-            f"\n{cat_hint}\n\n"
-            f"Fichier : {fname} (type : {file_type})\n\n"
-            f"Contenu :\n{text_truncated}"
+            f"\\n{cat_hint}\\n\\n"
+            f"Fichier : {fname} (type : {file_type})\\n\\n"
+            f"Contenu :\\n{text_truncated}"
         )
-        try:
-            response = ollama.chat(
-                model="mistral",
-                messages=[
-                    {"role": "system",
-                     "content": "Tu analyses des documents et retournes du JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                options={"temperature": 0.1}
-            )
-        except Exception as e:
-            err = str(e)
-            if "connection" in err.lower() or "refused" in err.lower():
-                raise RuntimeError("Ollama n est pas demarre. Lance : ollama serve")
-            raise
-
-    raw = response["message"]["content"].strip()
+        raw = call_ai([
+            {"role": "system", "content": "Tu analyses des documents et retournes du JSON."},
+            {"role": "user", "content": prompt},
+        ], temperature=0.1).strip()
 
     # Extraire le JSON
     match = re.search(r"\{.*\}", raw, re.DOTALL)
