@@ -165,9 +165,9 @@ def cli_reminders():
 def cli_ask(
     prompt: str = typer.Argument(..., help="Question ou commande en langage naturel"),
 ):
-    """Interroger l assistant IA local (Ollama/Mistral)."""
+    """Interroger l assistant IA local (Groq)."""
     from agents.local_ai import ask_ai
-    cons.print(f"[dim]Envoi a Mistral...[/dim]")
+    cons.print(f"[dim]Envoi a Groq...[/dim]")
     result = ask_ai(prompt)
     cons.print(f"[cyan]{result}[/cyan]")
 
