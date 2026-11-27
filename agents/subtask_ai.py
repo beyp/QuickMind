@@ -1,9 +1,9 @@
 """
-Generation de sous-taches via Mistral.
+Generation de sous-taches via Groq.
 """
 import json
 import re
-import ollama
+from agents.ai_client import call_ai
 
 
 def generate_subtasks(task_title: str, task_description: str = "",
@@ -28,26 +28,19 @@ def generate_subtasks(task_title: str, task_description: str = "",
         f"- Ordre logique d execution"
     )
 
-    try:
-        response = ollama.chat(
-            model="mistral",
-            messages=[
-                {"role": "system",
-                 "content": "Tu generes des listes de sous-taches en JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            options={"temperature": 0.2}
-        )
-        raw   = response["message"]["content"].strip()
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            subs = data.get("subtasks", [])
-            return [s.strip() for s in subs if s.strip()][:max_subtasks]
-    except Exception as e:
-        err = str(e)
-        if "connection" in err.lower() or "refused" in err.lower():
-            raise RuntimeError("Ollama n est pas demarre.")
-        raise
+    raw = call_ai(
+        [
+            {"role": "system", "content": "Tu generes des listes de sous-taches en JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
+    ).strip()
+    match = re.search(r"\\{.*\\}", raw, re.DOTALL)
+    if match:
+        data = json.loads(match.group())
+        subs = data.get("subtasks", [])
+        if isinstance(subs, list):
+            return [item.strip() for item in subs
+                    if isinstance(item, str) and item.strip()][:max_subtasks]
 
     return []
