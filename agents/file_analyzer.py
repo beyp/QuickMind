@@ -172,7 +172,7 @@ def analyze_with_ai(path: str, categories: list[str] = None) -> dict:
             b64 = base64.b64encode(f.read()).decode("ascii")
         mime = mimetypes.guess_type(path)[0] or "image/jpeg"
         user_content = [
-            {"type": "text", "text": ANALYSIS_PROMPT + f"\\n\\nFichier : {fname} (Image)"},
+            {"type": "text", "text": ANALYSIS_PROMPT + f"\n\nFichier : {fname} (Image)"},
             {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
         ]
         raw = call_ai([{"role": "user", "content": user_content}],
@@ -181,9 +181,9 @@ def analyze_with_ai(path: str, categories: list[str] = None) -> dict:
         cat_hint = f"Categories disponibles : {', '.join(categories)}" if categories else ""
         prompt = (
             ANALYSIS_PROMPT +
-            f"\\n{cat_hint}\\n\\n"
-            f"Fichier : {fname} (type : {file_type})\\n\\n"
-            f"Contenu :\\n{text_truncated}"
+            f"\n{cat_hint}\n\n"
+            f"Fichier : {fname} (type : {file_type})\n\n"
+            f"Contenu :\n{text_truncated}"
         )
         raw = call_ai([
             {"role": "system", "content": "Tu analyses des documents et retournes du JSON."},
