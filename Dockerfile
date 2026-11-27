@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.api.txt
 
 # Code source
 COPY core/ ./core/
+COPY agents/ ./agents/
 COPY run_api.py .
 COPY config.example.yaml ./config.yaml
 
