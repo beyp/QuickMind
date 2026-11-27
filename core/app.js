@@ -383,7 +383,7 @@ function addAISubs(){var p=[];for(var i=0;i<aiSugs.length;i++){var cb=g('aisg'+i
 // ── AI ───────────────────────────────────────────────────────────────────────
 function openAI(){g('ai-overlay').classList.add('open');}
 function closeAI(){g('ai-overlay').classList.remove('open');}
-function sendAI(){var tx=g('ai-prompt').value.trim(),res=g('ai-result');if(!tx)return;res.style.display='block';res.textContent='Mistral analyse...';apiFetch('/task/ai',{m:'POST',b:{text:tx}}).then(function(d){res.textContent=d.result;loadTasks();toast('IA traitee !','ok');}).catch(function(e){res.textContent='Erreur: '+e.message;});}
+function sendAI(){var tx=g('ai-prompt').value.trim(),res=g('ai-result');if(!tx)return;res.style.display='block';res.textContent='Groq analyse...';apiFetch('/task/ai',{m:'POST',b:{text:tx}}).then(function(d){res.textContent=d.result;loadTasks();toast('IA traitee !','ok');}).catch(function(e){res.textContent='Erreur: '+e.message;});}
 
 // ── Keyboard ─────────────────────────────────────────────────────────────────
 document.addEventListener('keydown',function(e){
@@ -566,7 +566,7 @@ function checkAIStatus() {
       badge.style.color = d.groq ? "var(--green)" : "var(--orange)";
       badge.title = d.groq
         ? "Groq " + d.groq_model + " (rapide)"
-        : "Ollama/Mistral (local)";
+        : "Groq indisponible";
     } else {
       badge.textContent = "IA : aucun moteur";
       badge.style.color = "var(--red)";
